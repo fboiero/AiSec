@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Informe de Analisis de Seguridad AiSec</title>
+<style>
+/* === AiSec Report Theme === */
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #16213e;
+  --accent-blue: #0f3460;
+  --accent-cyan: #00d4ff;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0b0;
+  --text-heading: #00d4ff;
+  --border-color: #2a2a4a;
+  --severity-critical: #dc3545;
+  --severity-high: #fd7e14;
+  --severity-medium: #ffc107;
+  --severity-low: #28a745;
+  --severity-info: #17a2b8;
+  --status-pass: #28a745;
+  --status-fail: #dc3545;
+  --status-partial: #ffc107;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  padding: 0;
+  margin: 0;
+}
+
+.container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+/* Header */
+.report-header {
+  background: linear-gradient(135deg, var(--accent-blue), var(--bg-secondary));
+  border-bottom: 3px solid var(--accent-cyan);
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.report-header h1 {
+  color: var(--accent-cyan);
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.5px;
+}
+
+.report-header .brand {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 1rem;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem 2rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.meta-grid strong { color: var(--text-primary); }
+
+/* Sections */
+.section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.section h2 {
+  color: var(--text-heading);
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section h3 {
+  color: var(--accent-cyan);
+  font-size: 1.1rem;
+  margin: 1rem 0 0.5rem 0;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-critical { background: var(--severity-critical); color: #fff; }
+.badge-high { background: var(--severity-high); color: #fff; }
+.badge-medium { background: var(--severity-medium); color: #000; }
+.badge-low { background: var(--severity-low); color: #fff; }
+.badge-info { background: var(--severity-info); color: #fff; }
+.badge-pass { background: var(--status-pass); color: #fff; }
+.badge-fail { background: var(--status-fail); color: #fff; }
+.badge-partial { background: var(--status-partial); color: #000; }
+
+/* Risk level large badge */
+.risk-badge-large {
+  display: inline-block;
+  padding: 0.5rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Severity counters */
+.severity-counters {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.severity-counter {
+  text-align: center;
+  padding: 0.75rem 1.25rem;
+  border-radius: 6px;
+  min-width: 80px;
+}
+
+.severity-counter .count { font-size: 1.8rem; font-weight: 700; display: block; }
+.severity-counter .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+
+.severity-counter.critical { background: rgba(220, 53, 69, 0.2); border: 1px solid var(--severity-critical); color: var(--severity-critical); }
+.severity-counter.high { background: rgba(253, 126, 20, 0.2); border: 1px solid var(--severity-high); color: var(--severity-high); }
+.severity-counter.medium { background: rgba(255, 193, 7, 0.2); border: 1px solid var(--severity-medium); color: var(--severity-medium); }
+.severity-counter.low { background: rgba(40, 167, 69, 0.2); border: 1px solid var(--severity-low); color: var(--severity-low); }
+.severity-counter.info-sev { background: rgba(23, 162, 184, 0.2); border: 1px solid var(--severity-info); color: var(--severity-info); }
+
+/* Score bars */
+.score-bar-container { margin: 0.75rem 0; }
+.score-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.score-bar-track {
+  background: var(--bg-primary);
+  border-radius: 4px;
+  height: 12px;
+  overflow: hidden;
+}
+.score-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.score-bar-fill.high-risk { background: linear-gradient(90deg, var(--severity-high), var(--severity-critical)); }
+.score-bar-fill.medium-risk { background: linear-gradient(90deg, var(--severity-medium), var(--severity-high)); }
+.score-bar-fill.low-risk { background: linear-gradient(90deg, var(--severity-low), var(--severity-medium)); }
+.score-bar-fill.safe { background: linear-gradient(90deg, var(--severity-info), var(--severity-low)); }
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+th, td {
+  border: 1px solid var(--border-color);
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+}
+
+th {
+  background: var(--accent-blue);
+  color: var(--accent-cyan);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+tr:nth-child(even) { background: rgba(15, 52, 96, 0.2); }
+
+/* Finding cards */
+.finding-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.finding-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  background: rgba(15, 52, 96, 0.3);
+  cursor: pointer;
+}
+
+.finding-card-header h4 { margin: 0; font-size: 1rem; color: var(--text-primary); }
+
+.finding-card-body { padding: 1rem; }
+.finding-card-body p { margin-bottom: 0.75rem; }
+.finding-card-body strong { color: var(--accent-cyan); }
+
+.finding-meta {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.tag {
+  display: inline-block;
+  background: var(--accent-blue);
+  color: var(--accent-cyan);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  margin: 0.15rem 0.25rem 0.15rem 0;
+}
+
+/* Top risks list */
+.top-risks { list-style: none; padding: 0; }
+.top-risks li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.9rem;
+}
+.top-risks li:last-child { border-bottom: none; }
+.top-risks li::before { content: "\26A0\0020"; color: var(--severity-high); }
+
+/* Footer */
+.report-footer {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  padding: 2rem 0;
+  border-top: 1px solid var(--border-color);
+  margin-top: 2rem;
+}
+</style>
+</head>
+<body>
+
+<!-- Encabezado -->
+<div class="report-header">
+  <div class="container">
+    <div class="brand">AiSec Framework</div>
+    <h1>Informe de Analisis de Seguridad</h1>
+    <div class="meta-grid">
+      <div><strong>Objetivo:</strong> {{ target_name }}</div>
+      <div><strong>Imagen:</strong> {{ target_image }}</div>
+      <div><strong>Generado:</strong> {{ generated_at }}</div>
+      <div><strong>Duracion del escaneo:</strong> {{ scan_duration_seconds }}s</div>
+      <div><strong>ID del informe:</strong> {{ report_id }}</div>
+      <div><strong>Version AiSec:</strong> {{ aisec_version }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Resumen Ejecutivo -->
+  <div class="section">
+    <h2>Resumen Ejecutivo</h2>
+
+    <p>
+      Nivel de riesgo general:
+      <span class="risk-badge-large badge-{{ executive_summary.overall_risk_level }}">
+        {{ executive_summary.overall_risk_level | upper }}
+      </span>
+    </p>
+
+    <div class="severity-counters">
+      <div class="severity-counter critical">
+        <span class="count">{{ executive_summary.critical_count }}</span>
+        <span class="label">Critico</span>
+      </div>
+      <div class="severity-counter high">
+        <span class="count">{{ executive_summary.high_count }}</span>
+        <span class="label">Alto</span>
+      </div>
+      <div class="severity-counter medium">
+        <span class="count">{{ executive_summary.medium_count }}</span>
+        <span class="label">Medio</span>
+      </div>
+      <div class="severity-counter low">
+        <span class="count">{{ executive_summary.low_count }}</span>
+        <span class="label">Bajo</span>
+      </div>
+      <div class="severity-counter info-sev">
+        <span class="count">{{ executive_summary.info_count }}</span>
+        <span class="label">Info</span>
+      </div>
+    </div>
+
+    <p>{{ executive_summary.summary_text }}</p>
+
+    {% if executive_summary.top_risks %}
+    <h3>Principales Riesgos</h3>
+    <ul class="top-risks">
+      {% for risk in executive_summary.top_risks %}
+      <li>{{ risk }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <!-- Vision General de Riesgos -->
+  <div class="section">
+    <h2>Vision General de Riesgos</h2>
+
+    {% set dimensions = [
+      ("Puntuacion de Riesgo IA", risk_overview.ai_risk_score),
+      ("Superficie de Ataque", risk_overview.attack_surface_score),
+      ("Exposicion de Datos", risk_overview.data_exposure_score),
+      ("Riesgo de Agencia", risk_overview.agency_risk_score),
+      ("Cadena de Suministro", risk_overview.supply_chain_score),
+      ("Cumplimiento", risk_overview.compliance_score),
+    ] %}
+
+    {% for label, score in dimensions %}
+    <div class="score-bar-container">
+      <div class="score-bar-label">
+        <span>{{ label }}</span>
+        <span>{{ score }}/100</span>
+      </div>
+      <div class="score-bar-track">
+        {% if score > 75 %}
+        <div class="score-bar-fill high-risk" style="width: {{ score }}%"></div>
+        {% elif score > 50 %}
+        <div class="score-bar-fill medium-risk" style="width: {{ score }}%"></div>
+        {% elif score > 25 %}
+        <div class="score-bar-fill low-risk" style="width: {{ score }}%"></div>
+        {% else %}
+        <div class="score-bar-fill safe" style="width: {{ score }}%"></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Evaluacion OWASP LLM Top 10 -->
+  <div class="section">
+    <h2>Evaluacion OWASP LLM Top 10 (2025)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Categoria</th>
+          <th>Hallazgos</th>
+          <th>Severidad Maxima</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat_id, cat_findings in owasp_llm_findings.items() %}
+        <tr>
+          <td>{{ cat_id }}</td>
+          <td>{{ cat_findings | length }}</td>
+          <td>
+            {% set severities = cat_findings | map(attribute='severity') | list %}
+            {% if 'critical' in severities %}
+            <span class="badge badge-critical">Critico</span>
+            {% elif 'high' in severities %}
+            <span class="badge badge-high">Alto</span>
+            {% elif 'medium' in severities %}
+            <span class="badge badge-medium">Medio</span>
+            {% elif 'low' in severities %}
+            <span class="badge badge-low">Bajo</span>
+            {% else %}
+            <span class="badge badge-info">Info</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not owasp_llm_findings %}
+        <tr><td colspan="3" style="text-align:center; color: var(--text-secondary);">No se identificaron hallazgos OWASP LLM</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Evaluacion OWASP Agentic Top 10 -->
+  <div class="section">
+    <h2>Evaluacion OWASP Agentic Top 10 (2026)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Categoria</th>
+          <th>Hallazgos</th>
+          <th>Severidad Maxima</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat_id, cat_findings in owasp_agentic_findings.items() %}
+        <tr>
+          <td>{{ cat_id }}</td>
+          <td>{{ cat_findings | length }}</td>
+          <td>
+            {% set severities = cat_findings | map(attribute='severity') | list %}
+            {% if 'critical' in severities %}
+            <span class="badge badge-critical">Critico</span>
+            {% elif 'high' in severities %}
+            <span class="badge badge-high">Alto</span>
+            {% elif 'medium' in severities %}
+            <span class="badge badge-medium">Medio</span>
+            {% elif 'low' in severities %}
+            <span class="badge badge-low">Bajo</span>
+            {% else %}
+            <span class="badge badge-info">Info</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not owasp_agentic_findings %}
+        <tr><td colspan="3" style="text-align:center; color: var(--text-secondary);">No se identificaron hallazgos OWASP Agentic</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Hallazgos Detallados -->
+  <div class="section">
+    <h2>Hallazgos Detallados</h2>
+
+    {% for finding in all_findings %}
+    <div class="finding-card">
+      <div class="finding-card-header">
+        <h4>{{ finding.title }}</h4>
+        <span class="badge badge-{{ finding.severity }}">{{ finding.severity | upper }}</span>
+      </div>
+      <div class="finding-card-body">
+        <div class="finding-meta">
+          <span><strong>Agente:</strong> {{ finding.agent }}</span>
+          <span><strong>Estado:</strong> {{ finding.status }}</span>
+          {% if finding.ai_risk_score is not none %}
+          <span><strong>Puntuacion de Riesgo IA:</strong> {{ finding.ai_risk_score }}</span>
+          {% endif %}
+        </div>
+
+        <p>{{ finding.description }}</p>
+
+        {% if finding.owasp_llm %}
+        <div><strong>OWASP LLM:</strong> {% for tag_id in finding.owasp_llm %}<span class="tag">{{ tag_id }}</span>{% endfor %}</div>
+        {% endif %}
+        {% if finding.owasp_agentic %}
+        <div><strong>OWASP Agentic:</strong> {% for tag_id in finding.owasp_agentic %}<span class="tag">{{ tag_id }}</span>{% endfor %}</div>
+        {% endif %}
+        {% if finding.nist_ai_rmf %}
+        <div><strong>NIST AI RMF:</strong> {% for tag_id in finding.nist_ai_rmf %}<span class="tag">{{ tag_id }}</span>{% endfor %}</div>
+        {% endif %}
+
+        {% if finding.evidence %}
+        <h3>Evidencia</h3>
+        {% for ev in finding.evidence %}
+        <div style="margin-left:1rem; margin-bottom:0.5rem;">
+          <em>{{ ev.type }}</em>: {{ ev.summary }}
+          {% if ev.location %}<br><code>{{ ev.location }}</code>{% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if finding.remediation %}
+        <h3>Remediacion</h3>
+        <p>{{ finding.remediation }}</p>
+        {% endif %}
+
+        {% if finding.references %}
+        <h3>Referencias</h3>
+        <ul>
+          {% for ref in finding.references %}
+          <li><a href="{{ ref }}" style="color: var(--accent-cyan);">{{ ref }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if not all_findings %}
+    <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No se identificaron hallazgos de seguridad durante este escaneo.</p>
+    {% endif %}
+  </div>
+
+  <!-- Listas de Verificacion de Cumplimiento -->
+  <div class="section">
+    <h2>Evaluacion de Cumplimiento</h2>
+
+    {% set checklists = [
+      ("Cumplimiento GDPR", compliance.gdpr),
+      ("Cumplimiento CCPA", compliance.ccpa),
+      ("Cumplimiento Habeas Data (Ley 25.326)", compliance.habeas_data),
+    ] %}
+
+    {% for checklist_name, checklist in checklists %}
+    <h3>{{ checklist_name }}</h3>
+    <p style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:0.5rem;">
+      Aprobados: {{ checklist.passed }}/{{ checklist.total_checks }} |
+      Fallidos: {{ checklist.failed }} |
+      N/A: {{ checklist.not_applicable }}
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Articulo</th>
+          <th>Requisito</th>
+          <th>Estado</th>
+          <th>Evidencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in checklist.items %}
+        <tr>
+          <td>{{ item.id }}</td>
+          <td>{{ item.article }}</td>
+          <td>{{ item.requirement }}</td>
+          <td>
+            {% if item.status == "pass" %}
+            <span class="badge badge-pass">APROBADO</span>
+            {% elif item.status == "fail" %}
+            <span class="badge badge-fail">FALLO</span>
+            {% elif item.status == "partial" %}
+            <span class="badge badge-partial">PARCIAL</span>
+            {% else %}
+            <span class="badge badge-info">N/A</span>
+            {% endif %}
+          </td>
+          <td>{{ item.evidence }}</td>
+        </tr>
+        {% endfor %}
+        {% if not checklist.items %}
+        <tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">No se definieron verificaciones</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    {% endfor %}
+  </div>
+
+  <!-- Pie de pagina -->
+  <div class="report-footer">
+    <p>Generado por AiSec v{{ aisec_version }}</p>
+    <p>
+      <strong>Metodologia:</strong> Este informe fue producido por agentes de analisis de seguridad de IA automatizados.
+      Los hallazgos se basan en analisis estatico, pruebas dinamicas y heuristicas mapeadas a frameworks.
+      Se recomienda revision manual para todos los hallazgos de severidad critica y alta.
+    </p>
+  </div>
+
+</div>
+
+</body>
+</html>

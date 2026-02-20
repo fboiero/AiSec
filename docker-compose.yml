@@ -1,0 +1,8 @@
+services:
+  aisec:
+    build: .
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./aisec-reports:/app/aisec-reports
+    environment:
+      - AISEC_LOG_LEVEL=INFO

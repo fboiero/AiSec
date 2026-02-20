@@ -1,0 +1,63 @@
+# AiSec Configuration
+# Copy this file to aisec.yaml and customize for your target
+
+target:
+  # Docker image of the AI agent to analyze
+  image: "ghcr.io/openclaw/openclaw:latest"
+  # Human-readable name for reports
+  name: "OpenClaw"
+  # Agent type: "openclaw", "generic", or "custom"
+  type: "openclaw"
+
+scan:
+  # Maximum scan duration in seconds
+  timeout: 3600
+  # Agents to run (or ["all"] for all agents)
+  agents:
+    - network
+    - dataflow
+    - privacy
+    - prompt_security
+    - supply_chain
+    - permission
+    - output
+  # Agents to skip (overrides agents list)
+  # skip_agents:
+  #   - prompt_security
+
+docker:
+  # Docker daemon connection
+  # host: "unix:///var/run/docker.sock"
+  # Container resource limits
+  memory_limit: "2g"
+  cpu_limit: 1.0
+
+report:
+  # Output formats: json, html, pdf
+  format: ["json", "html"]
+  # Report language: en (English) or es (Spanish)
+  language: "en"
+  # Output directory for reports
+  output_dir: "./aisec-reports"
+
+compliance:
+  # Compliance frameworks to evaluate
+  # Available: gdpr, ccpa, habeas_data
+  frameworks:
+    - gdpr
+    - ccpa
+    - habeas_data
+
+# Prompt Security agent configuration
+# prompt_security:
+#   payload_sets: ["default", "multilingual"]
+#   max_injection_attempts: 100
+
+# Supply Chain agent configuration
+# supply_chain:
+#   trivy_enabled: true
+#   sbom_format: "cyclonedx"
+
+# Logging
+# logging:
+#   level: "INFO"
