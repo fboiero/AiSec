@@ -67,10 +67,12 @@ def test_build_owasp_mapping(scan_context):
 def test_build_compliance_gdpr_fail(scan_context):
     findings = [
         Finding(
-            title="Data Leak",
+            title="Sensitive data disclosure - unauthorised access to personal data",
+            description="PII exposed without encryption, violating integrity and confidentiality",
             severity=Severity.HIGH,
             agent="test",
             owasp_llm=["LLM02"],
+            remediation="Implement encryption and access controls for security of processing",
         )
     ]
     scan_context.agent_results["test"] = AgentResult(

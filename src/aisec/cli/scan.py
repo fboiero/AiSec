@@ -84,7 +84,7 @@ async def _run_scan(
     from aisec.docker_.manager import DockerManager
     from aisec.plugins.loader import discover_plugins
     from aisec.reports.builder import ReportBuilder
-    from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer
+    from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer, sarif_renderer
 
     ctx = ScanContext(
         target_image=image,
@@ -196,6 +196,9 @@ async def _run_scan(
             elif fmt == "pdf":
                 path = pdf_renderer.render(report, output_dir / f"{base_name}.pdf")
                 rendered_files.append(path)
+            elif fmt == "sarif":
+                path = sarif_renderer.render(report, output_dir / f"{base_name}.sarif")
+                rendered_files.append(path)
             else:
                 console.print(f"[warning]Unknown format: {fmt}[/warning]")
         except Exception as exc:
@@ -233,7 +236,7 @@ async def _run_scan_with_dashboard(
     from aisec.docker_.manager import DockerManager
     from aisec.plugins.loader import discover_plugins
     from aisec.reports.builder import ReportBuilder
-    from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer
+    from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer, sarif_renderer
 
     ctx = ScanContext(
         target_image=image,
@@ -320,6 +323,9 @@ async def _run_scan_with_dashboard(
                 rendered_files.append(path)
             elif fmt == "pdf":
                 path = pdf_renderer.render(report, output_dir / f"{base_name}.pdf")
+                rendered_files.append(path)
+            elif fmt == "sarif":
+                path = sarif_renderer.render(report, output_dir / f"{base_name}.sarif")
                 rendered_files.append(path)
             else:
                 console.print(f"[warning]Unknown format: {fmt}[/warning]")

@@ -63,6 +63,10 @@ class ComplianceFramework(str, Enum):
     GDPR = "gdpr"
     CCPA = "ccpa"
     HABEAS_DATA = "habeas_data"
+    EU_AI_ACT = "eu_ai_act"
+    ISO_42001 = "iso_42001"
+    NIST_AI_600_1 = "nist_ai_600_1"
+    ARGENTINA_AI = "argentina_ai"
 
 
 class CheckStatus(str, Enum):

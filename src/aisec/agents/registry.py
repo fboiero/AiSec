@@ -81,6 +81,7 @@ def register_core_agents() -> None:
     from aisec.agents.guardrails import GuardrailAgent
     from aisec.agents.model_scan import ModelScanAgent
     from aisec.agents.adversarial import AdversarialAgent
+    from aisec.agents.cascade import CascadeAgent
 
     for agent_cls in (
         NetworkAgent,
@@ -96,6 +97,7 @@ def register_core_agents() -> None:
         GuardrailAgent,
         ModelScanAgent,
         AdversarialAgent,
+        CascadeAgent,
     ):
         default_registry.register(agent_cls)
 

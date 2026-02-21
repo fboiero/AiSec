@@ -117,6 +117,10 @@ class ComplianceReport:
     gdpr: ComplianceChecklist = field(default_factory=ComplianceChecklist)
     ccpa: ComplianceChecklist = field(default_factory=ComplianceChecklist)
     habeas_data: ComplianceChecklist = field(default_factory=ComplianceChecklist)
+    eu_ai_act: ComplianceChecklist = field(default_factory=ComplianceChecklist)
+    iso_42001: ComplianceChecklist = field(default_factory=ComplianceChecklist)
+    nist_ai_600_1: ComplianceChecklist = field(default_factory=ComplianceChecklist)
+    argentina_ai: ComplianceChecklist = field(default_factory=ComplianceChecklist)
 
 
 @dataclass

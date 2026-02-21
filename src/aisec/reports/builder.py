@@ -72,16 +72,13 @@ class ReportBuilder:
         compliance = self._evaluate_compliance(unique_findings)
 
         # Update risk_overview compliance score from checklist results
-        total_checks = (
-            compliance.gdpr.total_checks
-            + compliance.ccpa.total_checks
-            + compliance.habeas_data.total_checks
-        )
-        total_passed = (
-            compliance.gdpr.passed
-            + compliance.ccpa.passed
-            + compliance.habeas_data.passed
-        )
+        all_checklists = [
+            compliance.gdpr, compliance.ccpa, compliance.habeas_data,
+            compliance.eu_ai_act, compliance.iso_42001,
+            compliance.nist_ai_600_1, compliance.argentina_ai,
+        ]
+        total_checks = sum(cl.total_checks for cl in all_checklists)
+        total_passed = sum(cl.passed for cl in all_checklists)
         if total_checks > 0:
             risk_overview.compliance_score = round(
                 (total_passed / total_checks) * 100.0, 1
@@ -242,151 +239,51 @@ class ReportBuilder:
     def _evaluate_compliance(
         findings: list[Finding],
     ) -> ComplianceReport:
-        """Evaluate compliance checklists for GDPR, CCPA, and Habeas Data.
+        """Evaluate compliance checklists for all supported frameworks.
 
         This is a heuristic evaluation based on finding categories. A full
         compliance audit would require additional context and manual review.
         """
+        from aisec.frameworks.compliance.gdpr import evaluate_gdpr
+        from aisec.frameworks.compliance.ccpa import evaluate_ccpa
+        from aisec.frameworks.compliance.habeas_data import evaluate_habeas_data
 
-        def _has_category(target_ids: set[str]) -> bool:
-            """Check whether any finding maps to the given category IDs."""
-            for f in findings:
-                if target_ids & (set(f.owasp_llm) | set(f.owasp_agentic)):
-                    return True
-            return False
+        # Use the dedicated compliance evaluators
+        gdpr = evaluate_gdpr(findings, [])
+        ccpa = evaluate_ccpa(findings, [])
+        habeas_data = evaluate_habeas_data(findings, [])
 
-        # -- GDPR ----------------------------------------------------------
-        gdpr_items = [
-            ComplianceCheckItem(
-                id="GDPR-1",
-                article="Art. 5(1)(f)",
-                requirement="Integrity and confidentiality of personal data",
-                status="fail" if _has_category({"LLM02", "LLM07"}) else "pass",
-                evidence="Sensitive data disclosure or system prompt leakage detected"
-                if _has_category({"LLM02", "LLM07"})
-                else "No data disclosure findings",
-            ),
-            ComplianceCheckItem(
-                id="GDPR-2",
-                article="Art. 25",
-                requirement="Data protection by design and by default",
-                status="fail" if _has_category({"LLM02", "ASI06"}) else "pass",
-                evidence="Data exposure or context poisoning findings present"
-                if _has_category({"LLM02", "ASI06"})
-                else "No data protection design issues found",
-            ),
-            ComplianceCheckItem(
-                id="GDPR-3",
-                article="Art. 32",
-                requirement="Security of processing",
-                status="fail"
-                if _has_category({"LLM01", "LLM05", "ASI01", "ASI05"})
-                else "pass",
-                evidence="Injection or code execution vulnerabilities detected"
-                if _has_category({"LLM01", "LLM05", "ASI01", "ASI05"})
-                else "No processing security issues found",
-            ),
-            ComplianceCheckItem(
-                id="GDPR-4",
-                article="Art. 35",
-                requirement="Data protection impact assessment",
-                status="partial",
-                evidence="Automated DPIA assessment not yet supported; manual review recommended",
-            ),
-        ]
-        gdpr = ComplianceChecklist(
-            framework_name="GDPR",
-            total_checks=len(gdpr_items),
-            passed=sum(1 for i in gdpr_items if i.status == "pass"),
-            failed=sum(1 for i in gdpr_items if i.status == "fail"),
-            not_applicable=sum(1 for i in gdpr_items if i.status == "n/a"),
-            items=gdpr_items,
-        )
+        # New Q4 frameworks -- imported lazily to avoid circular imports
+        try:
+            from aisec.frameworks.compliance.eu_ai_act import evaluate_eu_ai_act
+            eu_ai_act = evaluate_eu_ai_act(findings, [])
+        except ImportError:
+            eu_ai_act = ComplianceChecklist(framework_name="EU AI Act")
 
-        # -- CCPA -----------------------------------------------------------
-        ccpa_items = [
-            ComplianceCheckItem(
-                id="CCPA-1",
-                article="Sec. 1798.100",
-                requirement="Right to know about personal information collected",
-                status="fail" if _has_category({"LLM02"}) else "pass",
-                evidence="Sensitive information disclosure findings present"
-                if _has_category({"LLM02"})
-                else "No personal information disclosure issues",
-            ),
-            ComplianceCheckItem(
-                id="CCPA-2",
-                article="Sec. 1798.150",
-                requirement="Data breach provisions",
-                status="fail" if _has_category({"LLM02", "LLM07", "ASI06"}) else "pass",
-                evidence="Potential data breach vectors identified"
-                if _has_category({"LLM02", "LLM07", "ASI06"})
-                else "No data breach vectors identified",
-            ),
-            ComplianceCheckItem(
-                id="CCPA-3",
-                article="Sec. 1798.185",
-                requirement="Reasonable security measures",
-                status="fail"
-                if _has_category({"LLM01", "LLM06", "ASI01", "ASI02"})
-                else "pass",
-                evidence="Security control weaknesses detected"
-                if _has_category({"LLM01", "LLM06", "ASI01", "ASI02"})
-                else "Reasonable security measures appear in place",
-            ),
-        ]
-        ccpa = ComplianceChecklist(
-            framework_name="CCPA",
-            total_checks=len(ccpa_items),
-            passed=sum(1 for i in ccpa_items if i.status == "pass"),
-            failed=sum(1 for i in ccpa_items if i.status == "fail"),
-            not_applicable=sum(1 for i in ccpa_items if i.status == "n/a"),
-            items=ccpa_items,
-        )
+        try:
+            from aisec.frameworks.compliance.iso_42001 import evaluate_iso_42001
+            iso_42001 = evaluate_iso_42001(findings, [])
+        except ImportError:
+            iso_42001 = ComplianceChecklist(framework_name="ISO/IEC 42001:2023")
 
-        # -- Habeas Data (Argentina Ley 25.326) ----------------------------
-        habeas_items = [
-            ComplianceCheckItem(
-                id="HD-1",
-                article="Art. 9",
-                requirement="Seguridad de los datos - medidas tecnicas y organizativas",
-                status="fail"
-                if _has_category({"LLM01", "LLM05", "ASI01", "ASI05"})
-                else "pass",
-                evidence="Vulnerabilidades de inyeccion o ejecucion de codigo detectadas"
-                if _has_category({"LLM01", "LLM05", "ASI01", "ASI05"})
-                else "No se encontraron problemas de seguridad de procesamiento",
-            ),
-            ComplianceCheckItem(
-                id="HD-2",
-                article="Art. 10",
-                requirement="Deber de confidencialidad",
-                status="fail" if _has_category({"LLM02", "LLM07"}) else "pass",
-                evidence="Divulgacion de informacion sensible o fuga de prompt del sistema"
-                if _has_category({"LLM02", "LLM07"})
-                else "No se detectaron problemas de confidencialidad",
-            ),
-            ComplianceCheckItem(
-                id="HD-3",
-                article="Art. 25",
-                requirement="Control y acceso a datos personales",
-                status="fail" if _has_category({"LLM06", "ASI02", "ASI03"}) else "pass",
-                evidence="Riesgos de agencia excesiva o abuso de privilegios detectados"
-                if _has_category({"LLM06", "ASI02", "ASI03"})
-                else "Controles de acceso adecuados",
-            ),
-        ]
-        habeas_data = ComplianceChecklist(
-            framework_name="Habeas Data (Ley 25.326)",
-            total_checks=len(habeas_items),
-            passed=sum(1 for i in habeas_items if i.status == "pass"),
-            failed=sum(1 for i in habeas_items if i.status == "fail"),
-            not_applicable=sum(1 for i in habeas_items if i.status == "n/a"),
-            items=habeas_items,
-        )
+        try:
+            from aisec.frameworks.nist_ai_600_1 import evaluate_nist_600_1
+            nist_ai_600_1 = evaluate_nist_600_1(findings, [])
+        except ImportError:
+            nist_ai_600_1 = ComplianceChecklist(framework_name="NIST AI 600-1")
+
+        try:
+            from aisec.frameworks.compliance.argentina_ai import evaluate_argentina_ai
+            argentina_ai = evaluate_argentina_ai(findings, [])
+        except ImportError:
+            argentina_ai = ComplianceChecklist(framework_name="Argentina AI Governance")
 
         return ComplianceReport(
             gdpr=gdpr,
             ccpa=ccpa,
             habeas_data=habeas_data,
+            eu_ai_act=eu_ai_act,
+            iso_42001=iso_42001,
+            nist_ai_600_1=nist_ai_600_1,
+            argentina_ai=argentina_ai,
         )
