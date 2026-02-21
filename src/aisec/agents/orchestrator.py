@@ -88,14 +88,14 @@ class OrchestratorAgent:
     # Execution
     # ------------------------------------------------------------------
 
-    async def run_scan(self) -> list[AgentResult]:
+    async def run_scan(self) -> dict[str, AgentResult]:
         """Execute the full scan respecting the dependency DAG.
 
         1. Retrieve enabled agents from the registry.
         2. Build the execution DAG (topological layers).
         3. Run each layer concurrently.
         4. Store results in ``context.agent_results``.
-        5. Return all results.
+        5. Return all results keyed by agent name.
         """
         config = self.context.config
         if config is None:
@@ -105,7 +105,7 @@ class OrchestratorAgent:
 
         if not enabled:
             logger.warning("No agents enabled for this scan")
-            return []
+            return {}
 
         layers = self.build_dag(enabled)
         logger.info(
@@ -113,8 +113,6 @@ class OrchestratorAgent:
             len(layers),
             sum(len(l) for l in layers),
         )
-
-        all_results: list[AgentResult] = []
 
         for layer_idx, layer in enumerate(layers):
             logger.info(
@@ -134,15 +132,14 @@ class OrchestratorAgent:
 
             for result in layer_results:
                 self.context.agent_results[result.agent] = result
-                all_results.append(result)
                 self.context.event_bus.emit("agent.completed", result)
 
         logger.info(
             "Scan complete: %d agents, %d total findings",
-            len(all_results),
-            sum(len(r.findings) for r in all_results),
+            len(self.context.agent_results),
+            sum(len(r.findings) for r in self.context.agent_results.values()),
         )
-        return all_results
+        return dict(self.context.agent_results)
 
     async def _run_agent(self, agent: BaseAgent) -> AgentResult:
         """Run a single agent, catching any unexpected errors."""

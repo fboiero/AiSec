@@ -532,7 +532,7 @@ tr:nth-child(even) { background: rgba(15, 52, 96, 0.2); }
         </tr>
       </thead>
       <tbody>
-        {% for item in checklist.items %}
+        {% for item in checklist["items"] %}
         <tr>
           <td>{{ item.id }}</td>
           <td>{{ item.article }}</td>
@@ -551,7 +551,7 @@ tr:nth-child(even) { background: rgba(15, 52, 96, 0.2); }
           <td>{{ item.evidence }}</td>
         </tr>
         {% endfor %}
-        {% if not checklist.items %}
+        {% if not checklist["items"] %}
         <tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">No se definieron verificaciones</td></tr>
         {% endif %}
       </tbody>

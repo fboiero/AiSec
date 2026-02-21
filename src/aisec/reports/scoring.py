@@ -46,7 +46,7 @@ class AiCvssScore:
             + self.cascade_potential * 0.15
         )
 
-        return min(10.0, round(base + ai_modifier * 2.0, 1))
+        return min(10.0, round(base + ai_modifier * 3.0, 1))
 
 
 def score_finding(finding: Finding) -> float:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +16,8 @@ from aisec.cli.console import console
 from aisec.core.config import AiSecConfig
 from aisec.core.context import ScanContext
 from aisec.core.enums import Severity
+
+logger = logging.getLogger(__name__)
 
 scan_app = typer.Typer(help="Run security analysis scans.")
 
@@ -65,16 +68,31 @@ async def _run_scan(
     config: AiSecConfig,
     verbose: bool,
 ) -> ScanContext:
-    """Execute the scan pipeline (placeholder implementation)."""
+    """Execute the full scan pipeline.
+
+    1. Create scan context
+    2. Set up Docker sandbox (if Docker available)
+    3. Register core agents + plugins
+    4. Run orchestrator
+    5. Build report
+    6. Render to selected formats
+    7. Clean up sandbox
+    """
+    from aisec.agents.orchestrator import OrchestratorAgent
+    from aisec.agents.registry import AgentRegistry, register_core_agents, default_registry
+    from aisec.docker_.manager import DockerManager
+    from aisec.plugins.loader import discover_plugins
+    from aisec.reports.builder import ReportBuilder
+    from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer
+
     ctx = ScanContext(
         target_image=image,
         target_name=config.target_name or image.split("/")[-1].split(":")[0],
         config=config,
     )
 
-    # Placeholder -- the real orchestrator will be wired in later.
-    console.print(f"[info]Scanning [bold]{image}[/bold] ...[/info]")
-
+    # ── Phase 1: Docker sandbox ──────────────────────────────────────
+    docker_available = False
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -82,11 +100,117 @@ async def _run_scan(
         TimeElapsedColumn(),
         console=console,
     ) as progress:
-        task = progress.add_task("Running agents...", total=100)
-        # Simulate work
-        for step in range(10):
-            await asyncio.sleep(0.1)
-            progress.update(task, advance=10, description=f"Phase {step + 1}/10")
+        setup_task = progress.add_task("Setting up Docker sandbox...", total=3)
+
+        try:
+            dm = DockerManager(
+                target_image=image,
+                scan_id=str(ctx.scan_id),
+                memory_limit=config.container_memory_limit,
+                cpu_limit=config.container_cpu_limit,
+            )
+            progress.update(setup_task, advance=1, description="Pulling image and starting container...")
+            sandbox = await dm.setup_sandbox()
+            ctx.docker_manager = dm
+            ctx.container_id = sandbox.target.short_id if sandbox.target else None
+            docker_available = True
+            progress.update(setup_task, advance=2, description="Docker sandbox ready")
+        except Exception as exc:
+            progress.update(setup_task, advance=3, description="Docker not available")
+            console.print(
+                f"[warning]Docker sandbox unavailable: {exc}[/warning]\n"
+                "[info]Running static analysis only (no container introspection).[/info]"
+            )
+
+    # ── Phase 2: Register agents ─────────────────────────────────────
+    register_core_agents()
+    registry = default_registry
+
+    # Load plugins
+    plugins = discover_plugins()
+    for plugin in plugins:
+        try:
+            plugin.register_agents(registry)
+            if verbose:
+                console.print(f"  [info]Plugin loaded: {plugin.name} v{plugin.version}[/info]")
+        except Exception as exc:
+            console.print(f"  [warning]Plugin {plugin.name} failed: {exc}[/warning]")
+
+    agent_count = len(registry.get_enabled(config))
+    console.print(f"[info]Scanning [bold]{image}[/bold] with {agent_count} agents...[/info]")
+
+    # ── Phase 3: Run orchestrator ────────────────────────────────────
+    orchestrator = OrchestratorAgent(ctx, registry)
+
+    # Track progress via events
+    completed_count = 0
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        scan_task = progress.add_task("Running security agents...", total=agent_count)
+
+        def _on_agent_complete(result: object) -> None:
+            nonlocal completed_count
+            completed_count += 1
+            agent_name = getattr(result, "agent", "unknown")
+            finding_count = len(getattr(result, "findings", []))
+            progress.update(
+                scan_task,
+                advance=1,
+                description=f"Agent [bold]{agent_name}[/bold] done ({finding_count} findings)",
+            )
+
+        ctx.event_bus.on("agent.completed", _on_agent_complete)
+
+        try:
+            await orchestrator.run_scan()
+        except Exception as exc:
+            console.print(f"[error]Scan error: {exc}[/error]")
+            logger.exception("Scan failed")
+
+    # ── Phase 4: Build report ────────────────────────────────────────
+    console.print("[info]Building report...[/info]")
+    builder = ReportBuilder()
+    report = builder.build(ctx, language=config.report_language)
+
+    # ── Phase 5: Render outputs ──────────────────────────────────────
+    output_dir = Path(config.report_output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base_name = f"aisec-{ctx.target_name}-{str(ctx.scan_id)[:8]}"
+
+    rendered_files: list[Path] = []
+    for fmt in config.report_formats:
+        fmt = fmt.strip().lower()
+        try:
+            if fmt == "json":
+                path = json_renderer.render(report, output_dir / f"{base_name}.json")
+                rendered_files.append(path)
+            elif fmt == "html":
+                path = html_renderer.render(report, output_dir / f"{base_name}.html")
+                rendered_files.append(path)
+            elif fmt == "pdf":
+                path = pdf_renderer.render(report, output_dir / f"{base_name}.pdf")
+                rendered_files.append(path)
+            else:
+                console.print(f"[warning]Unknown format: {fmt}[/warning]")
+        except Exception as exc:
+            console.print(f"[warning]Failed to render {fmt}: {exc}[/warning]")
+            logger.exception("Render failed for format %s", fmt)
+
+    # ── Phase 6: Cleanup ─────────────────────────────────────────────
+    if docker_available and ctx.docker_manager:
+        try:
+            await ctx.docker_manager.cleanup()
+        except Exception:
+            logger.warning("Docker cleanup failed", exc_info=True)
+
+    # Store rendered paths in metadata for display
+    ctx.metadata["rendered_files"] = [str(p) for p in rendered_files]
+    ctx.metadata["report"] = report
 
     console.print("[success]Scan complete.[/success]")
     return ctx
@@ -172,6 +296,8 @@ def scan(
         cfg = AiSecConfig(**overrides)  # type: ignore[arg-type]
 
     if verbose:
+        import logging as _logging
+        _logging.basicConfig(level=_logging.DEBUG, format="%(name)s %(message)s")
         console.print(Panel(str(cfg), title="Resolved configuration", style="dim"))
 
     # ── Execute scan ────────────────────────────────────────────────
@@ -180,14 +306,22 @@ def scan(
     # ── Display results ─────────────────────────────────────────────
     if ctx.agent_results:
         console.print(_build_results_table(ctx))
+
+        # Summary stats
+        total_findings = sum(len(r.findings) for r in ctx.agent_results.values())
+        console.print(
+            f"\n[info]Total findings: [bold]{total_findings}[/bold] "
+            f"across {len(ctx.agent_results)} agents[/info]"
+        )
     else:
         console.print(
-            Panel(
-                "[info]No agent results yet -- orchestrator not wired.[/info]",
-                title="Results",
-            )
+            Panel("[warning]No agent results produced.[/warning]", title="Results")
         )
 
-    console.print(
-        f"\n[success]Reports will be written to:[/success] {output_dir}\n"
-    )
+    # ── Report paths ─────────────────────────────────────────────────
+    rendered = ctx.metadata.get("rendered_files", [])
+    if rendered:
+        console.print("\n[success]Reports written to:[/success]")
+        for path in rendered:
+            console.print(f"  {path}")
+    console.print()
