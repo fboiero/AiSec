@@ -341,7 +341,7 @@ async def _run_scan_with_dashboard(
     return ctx
 
 
-@scan_app.callback(invoke_without_command=True)
+@scan_app.command(name="run")
 def scan(
     image: str = typer.Argument(..., help="Docker image or target to scan."),
     agents: Optional[str] = typer.Option(  # noqa: UP007

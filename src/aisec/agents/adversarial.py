@@ -729,7 +729,7 @@ class AdversarialAgent(BaseAgent):
         # Source code checks for missing safeguards
         for fpath, content in source_files.items():
             # Recursive operations without depth limits
-            if re.search(r"def\s+\w+\s*\([^)]*\).*\n(?:.*\n)*?.*\1\s*\(", content):
+            if re.search(r"def\s+(\w+)\s*\([^)]*\).*\n(?:.*\n)*?.*\1\s*\(", content):
                 issues.append((f"Recursive function without apparent depth limit in {fpath}", Severity.MEDIUM))
             elif re.search(r"(?i)recurs|while\s+True|for\s+.*\s+in\s+.*itertools\.count", content):
                 if not re.search(r"(?i)max_depth|max_recurs|depth_limit|recursion_limit", content):
