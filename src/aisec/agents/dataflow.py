@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import re
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from aisec.agents.base import BaseAgent
 from aisec.core.enums import AgentPhase, Severity
@@ -102,32 +102,37 @@ class DataFlowAgent(BaseAgent):
     # File collection
     # ------------------------------------------------------------------
 
+    def _exec_in_container(self, command: str) -> tuple[int, str]:
+        """Execute a command in the target container via DockerManager or CLI."""
+        dm = self.context.docker_manager
+        if dm is not None:
+            return dm.exec_in_target(command)
+        return 1, ""
+
     async def _collect_file_contents(self) -> dict[str, str] | None:
         """Gather text file contents from the container.
 
         Returns a dict mapping file path -> content (truncated).
         """
         cid = self.context.container_id
-        if not cid:
+        dm = self.context.docker_manager
+        if not cid and dm is None:
             return None
 
         # Build a find command for relevant extensions
         ext_args = " -o ".join(f"-name '{e}'" for e in _FILE_EXTENSIONS.split())
         find_cmd = (
             f"find {_SCAN_DIRS} -maxdepth 5 -type f \\( {ext_args} \\) "
-            f"-size -1M 2>/dev/null | head -200"
+            f"-size -1024k 2>/dev/null | head -200"
         )
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "exec", cid, "sh", "-c", find_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            exit_code, output = await asyncio.to_thread(
+                self._exec_in_container, f"sh -c {find_cmd!r}"
             )
-            stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
+            if exit_code != 0:
                 return None
-            file_list = stdout.decode(errors="replace").strip().splitlines()
+            file_list = output.strip().splitlines()
         except Exception:
             return None
 
@@ -140,14 +145,11 @@ class DataFlowAgent(BaseAgent):
             if not fpath:
                 continue
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid, "head", "-c", "65536", fpath,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                exit_code, output = await asyncio.to_thread(
+                    self._exec_in_container, f"head -c 65536 {fpath}"
                 )
-                stdout, _ = await proc.communicate()
-                if proc.returncode == 0:
-                    contents[fpath] = stdout.decode(errors="replace")
+                if exit_code == 0:
+                    contents[fpath] = output
             except Exception:
                 continue
 
@@ -277,24 +279,22 @@ class DataFlowAgent(BaseAgent):
                 ai_risk_score=8.0,
             )
 
+    def _get_inspect_data(self) -> dict[str, Any]:
+        """Return docker inspect data via DockerManager."""
+        dm = self.context.docker_manager
+        if dm is not None:
+            return dm.inspect_target()
+        return {}
+
     async def _check_env_secrets(self) -> list[tuple[str, str]]:
         """Check container environment variables for secrets."""
-        cid = self.context.container_id
-        if not cid:
+        dm = self.context.docker_manager
+        if dm is None and not self.context.container_id:
             return []
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "inspect",
-                "--format", "{{json .Config.Env}}",
-                cid,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
-                return []
-            env_list = json.loads(stdout.decode(errors="replace"))
+            info = await asyncio.to_thread(self._get_inspect_data)
+            env_list = info.get("Config", {}).get("Env") or []
         except Exception:
             return []
 
@@ -318,22 +318,13 @@ class DataFlowAgent(BaseAgent):
 
     async def _check_encryption_at_rest(self) -> None:
         """Check whether data volumes use encryption."""
-        cid = self.context.container_id
-        if not cid:
+        dm = self.context.docker_manager
+        if dm is None and not self.context.container_id:
             return
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "inspect",
-                "--format", "{{json .Mounts}}",
-                cid,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
-                return
-            mounts = json.loads(stdout.decode(errors="replace"))
+            info = await asyncio.to_thread(self._get_inspect_data)
+            mounts = info.get("Mounts") or []
         except Exception:
             return
 
@@ -390,20 +381,17 @@ class DataFlowAgent(BaseAgent):
 
     async def _check_unprotected_logs(self) -> None:
         """Check for log files that may contain sensitive data."""
+        dm = self.context.docker_manager
         cid = self.context.container_id
-        if not cid:
+        if dm is None and not cid:
             return
 
+        find_cmd = "find /var/log /tmp /app -maxdepth 4 -name '*.log' -type f -size +0 2>/dev/null | head -30"
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "exec", cid,
-                "sh", "-c",
-                "find /var/log /tmp /app -maxdepth 4 -name '*.log' -type f -size +0 2>/dev/null | head -30",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            exit_code, output = await asyncio.to_thread(
+                self._exec_in_container, f"sh -c {find_cmd!r}"
             )
-            stdout, _ = await proc.communicate()
-            log_files = stdout.decode(errors="replace").strip().splitlines() if proc.returncode == 0 else []
+            log_files = output.strip().splitlines() if exit_code == 0 else []
         except Exception:
             log_files = []
 
@@ -417,15 +405,11 @@ class DataFlowAgent(BaseAgent):
             if not log_path:
                 continue
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid, "tail", "-c", "8192", log_path,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                exit_code, content = await asyncio.to_thread(
+                    self._exec_in_container, f"tail -c 8192 {log_path}"
                 )
-                stdout, _ = await proc.communicate()
-                if proc.returncode != 0:
+                if exit_code != 0:
                     continue
-                content = stdout.decode(errors="replace")
                 for pii_name, regex in PII_PATTERNS.items():
                     if regex.search(content):
                         sensitive_logs.append((log_path, pii_name))
@@ -470,15 +454,11 @@ class DataFlowAgent(BaseAgent):
         elif log_files:
             # Check permissions on log files
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid,
-                    "sh", "-c",
-                    "ls -la " + " ".join(f.strip() for f in log_files[:10]) + " 2>/dev/null",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                ls_cmd = "ls -la " + " ".join(f.strip() for f in log_files[:10]) + " 2>/dev/null"
+                exit_code, perms = await asyncio.to_thread(
+                    self._exec_in_container, f"sh -c {ls_cmd!r}"
                 )
-                stdout, _ = await proc.communicate()
-                perms = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+                perms = perms.strip() if exit_code == 0 else ""
             except Exception:
                 perms = ""
 
@@ -605,26 +585,18 @@ class DataFlowAgent(BaseAgent):
             for m in matches[:3]:
                 db_hits.append((fpath, str(m)))
 
-        # Scan environment variables
-        cid = self.context.container_id
-        if cid:
+        # Scan environment variables via DockerManager
+        dm = self.context.docker_manager
+        if dm is not None:
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "inspect",
-                    "--format", "{{json .Config.Env}}",
-                    cid,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, _ = await proc.communicate()
-                if proc.returncode == 0:
-                    env_list = json.loads(stdout.decode(errors="replace"))
-                    for env_str in env_list or []:
-                        if "=" not in env_str:
-                            continue
-                        key, _, value = env_str.partition("=")
-                        if db_url_pattern.search(value):
-                            db_hits.append((f"ENV:{key}", value))
+                info = await asyncio.to_thread(self._get_inspect_data)
+                env_list = info.get("Config", {}).get("Env") or []
+                for env_str in env_list:
+                    if "=" not in env_str:
+                        continue
+                    key, _, value = env_str.partition("=")
+                    if db_url_pattern.search(value):
+                        db_hits.append((f"ENV:{key}", value))
             except Exception:
                 pass
 
@@ -684,8 +656,9 @@ class DataFlowAgent(BaseAgent):
         Searches for common backup extensions (.bak, .dump, .sql, .tar.gz)
         and checks whether they appear to be encrypted.
         """
+        dm = self.context.docker_manager
         cid = self.context.container_id
-        if not cid:
+        if dm is None and not cid:
             return
 
         backup_extensions = "*.bak *.dump *.sql *.tar.gz *.sql.gz *.bak.gz *.backup"
@@ -696,15 +669,12 @@ class DataFlowAgent(BaseAgent):
         )
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "exec", cid, "sh", "-c", find_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            exit_code, output = await asyncio.to_thread(
+                self._exec_in_container, f"sh -c {find_cmd!r}"
             )
-            stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
+            if exit_code != 0:
                 return
-            backup_files = stdout.decode(errors="replace").strip().splitlines()
+            backup_files = output.strip().splitlines()
         except Exception:
             return
 
@@ -719,24 +689,18 @@ class DataFlowAgent(BaseAgent):
                 continue
             try:
                 # Read first 16 bytes to check for encryption magic bytes
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid,
-                    "sh", "-c", f"head -c 16 '{bfile}' | od -A x -t x1z -N 16 2>/dev/null",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                header_cmd = f"head -c 16 '{bfile}' | od -A x -t x1z -N 16 2>/dev/null"
+                exit_code, header = await asyncio.to_thread(
+                    self._exec_in_container, f"sh -c {header_cmd!r}"
                 )
-                stdout, _ = await proc.communicate()
-                header = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+                header = header.strip() if exit_code == 0 else ""
 
                 # Get file size
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid,
-                    "sh", "-c", f"ls -lh '{bfile}' 2>/dev/null",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                ls_cmd = f"ls -lh '{bfile}' 2>/dev/null"
+                exit_code, file_info = await asyncio.to_thread(
+                    self._exec_in_container, f"sh -c {ls_cmd!r}"
                 )
-                stdout, _ = await proc.communicate()
-                file_info = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+                file_info = file_info.strip() if exit_code == 0 else ""
 
                 # GPG/PGP encrypted files start with specific magic bytes;
                 # if we do not see them, treat the file as unencrypted.
@@ -801,21 +765,13 @@ class DataFlowAgent(BaseAgent):
         a Mermaid diagram summarizing the data flows.
         """
         cid = self.context.container_id
-        if not cid:
+        dm = self.context.docker_manager
+        if dm is None and not cid:
             return
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "inspect",
-                "--format", "{{json .Config.Env}}",
-                cid,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
-                return
-            env_list = json.loads(stdout.decode(errors="replace"))
+            info = await asyncio.to_thread(self._get_inspect_data)
+            env_list = info.get("Config", {}).get("Env") or []
         except Exception:
             return
 

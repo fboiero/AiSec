@@ -66,9 +66,10 @@ class NetworkAgent(BaseAgent):
             logger.debug("docker_manager not set; attempting CLI fallback")
             return await self._inspect_via_cli()
         try:
-            return await dm.inspect_container(self.context.container_id)  # type: ignore[union-attr]
+            info = await asyncio.to_thread(dm.inspect_target)
+            return info if info else await self._inspect_via_cli()
         except Exception:
-            logger.debug("docker_manager.inspect_container failed; trying CLI")
+            logger.debug("docker_manager.inspect_target failed; trying CLI")
             return await self._inspect_via_cli()
 
     async def _inspect_via_cli(self) -> dict[str, Any] | None:

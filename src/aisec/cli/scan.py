@@ -113,7 +113,7 @@ async def _run_scan(
             progress.update(setup_task, advance=1, description="Pulling image and starting container...")
             sandbox = await dm.setup_sandbox()
             ctx.docker_manager = dm
-            ctx.container_id = sandbox.target.short_id if sandbox.target else None
+            ctx.container_id = sandbox.target.id if sandbox.target else None
             docker_available = True
             progress.update(setup_task, advance=2, description="Docker sandbox ready")
         except Exception as exc:
@@ -262,7 +262,7 @@ async def _run_scan_with_dashboard(
             progress.update(setup_task, advance=1, description="Pulling image and starting container...")
             sandbox = await dm.setup_sandbox()
             ctx.docker_manager = dm
-            ctx.container_id = sandbox.target.short_id if sandbox.target else None
+            ctx.container_id = sandbox.target.id if sandbox.target else None
             docker_available = True
             progress.update(setup_task, advance=2, description="Docker sandbox ready")
         except Exception as exc:

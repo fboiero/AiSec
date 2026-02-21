@@ -101,28 +101,35 @@ class OutputAgent(BaseAgent):
     # Source file collection
     # ------------------------------------------------------------------
 
+    def _exec_in_container(self, command: str) -> tuple[int, str]:
+        """Execute a command in the target container via DockerManager."""
+        dm = self.context.docker_manager
+        if dm is not None:
+            return dm.exec_in_target(command)
+        return 1, ""
+
     async def _collect_source_files(self) -> dict[str, str]:
         """Gather source files from the container."""
+        dm = self.context.docker_manager
         cid = self.context.container_id
-        if not cid:
+        if dm is None and not cid:
             return {}
 
+        find_cmd = (
+            "find /app /src /opt -maxdepth 5 -type f "
+            "\\( -name '*.py' -o -name '*.js' -o -name '*.ts' "
+            "-o -name '*.html' -o -name '*.jinja' -o -name '*.jinja2' "
+            "-o -name '*.hbs' -o -name '*.ejs' \\) "
+            "-size -512k 2>/dev/null | head -100"
+        )
+
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker", "exec", cid,
-                "sh", "-c",
-                "find /app /src /opt -maxdepth 5 -type f "
-                "\\( -name '*.py' -o -name '*.js' -o -name '*.ts' "
-                "-o -name '*.html' -o -name '*.jinja' -o -name '*.jinja2' "
-                "-o -name '*.hbs' -o -name '*.ejs' \\) "
-                "-size -512k 2>/dev/null | head -100",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            exit_code, output = await asyncio.to_thread(
+                self._exec_in_container, f"sh -c {find_cmd!r}"
             )
-            stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
+            if exit_code != 0:
                 return {}
-            file_list = stdout.decode(errors="replace").strip().splitlines()
+            file_list = output.strip().splitlines()
         except Exception:
             return {}
 
@@ -132,14 +139,11 @@ class OutputAgent(BaseAgent):
             if not fpath:
                 continue
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid, "head", "-c", "65536", fpath,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                exit_code, content = await asyncio.to_thread(
+                    self._exec_in_container, f"head -c 65536 {fpath}"
                 )
-                stdout, _ = await proc.communicate()
-                if proc.returncode == 0:
-                    contents[fpath] = stdout.decode(errors="replace")
+                if exit_code == 0:
+                    contents[fpath] = content
             except Exception:
                 continue
         return contents
@@ -445,34 +449,28 @@ class OutputAgent(BaseAgent):
                     break
 
         # Also check for rate limiting in nginx/caddy/reverse proxy configs
-        cid = self.context.container_id
-        if cid and not has_rate_limiting:
+        dm = self.context.docker_manager
+        if dm is not None and not has_rate_limiting:
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", cid,
-                    "sh", "-c",
+                find_proxy_cmd = (
                     "find / -maxdepth 4 "
                     "\\( -name 'nginx.conf' -o -name 'Caddyfile' -o -name 'haproxy.cfg' \\) "
-                    "2>/dev/null | head -5",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                    "2>/dev/null | head -5"
                 )
-                stdout, _ = await proc.communicate()
-                proxy_files = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+                exit_code, output = await asyncio.to_thread(
+                    self._exec_in_container, f"sh -c {find_proxy_cmd!r}"
+                )
+                proxy_files = output.strip() if exit_code == 0 else ""
                 if proxy_files:
                     for pf in proxy_files.splitlines():
                         pf = pf.strip()
                         if not pf:
                             continue
                         try:
-                            proc2 = await asyncio.create_subprocess_exec(
-                                "docker", "exec", cid, "cat", pf,
-                                stdout=asyncio.subprocess.PIPE,
-                                stderr=asyncio.subprocess.PIPE,
+                            exit_code, proxy_content = await asyncio.to_thread(
+                                self._exec_in_container, f"cat {pf}"
                             )
-                            stdout2, _ = await proc2.communicate()
-                            if proc2.returncode == 0:
-                                proxy_content = stdout2.decode(errors="replace")
+                            if exit_code == 0:
                                 if re.search(r"(?i)(limit_req|rate_limit|limit_conn)", proxy_content):
                                     has_rate_limiting = True
                                     rate_limit_files.append(pf)
