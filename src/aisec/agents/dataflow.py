@@ -93,6 +93,10 @@ class DataFlowAgent(BaseAgent):
         await self._check_credentials(file_contents)
         await self._check_encryption_at_rest()
         await self._check_unprotected_logs()
+        await self._check_data_retention(file_contents)
+        await self._check_database_credentials(file_contents)
+        await self._check_backup_security()
+        await self._check_data_flow_mapping()
 
     # ------------------------------------------------------------------
     # File collection
@@ -507,3 +511,427 @@ class DataFlowAgent(BaseAgent):
                     ),
                     cvss_score=3.0,
                 )
+
+    # ------------------------------------------------------------------
+    # Data retention policy checks
+    # ------------------------------------------------------------------
+
+    async def _check_data_retention(self, files: dict[str, str]) -> None:
+        """Look for data retention policies in configuration files.
+
+        Flags a finding if no retention, TTL, or expiry configuration is
+        found, since AI agents that process personal or sensitive data
+        without a retention policy risk regulatory violations.
+        """
+        retention_pattern = re.compile(
+            r"(?i)(?:retention|ttl|expir[ey]|max[_\-]?age|purge|cleanup[_\-]?after"
+            r"|delete[_\-]?after|keep[_\-]?days|log[_\-]?rotation)",
+        )
+
+        config_extensions = (".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".json", ".env")
+
+        retention_found: list[tuple[str, str]] = []
+        for fpath, content in files.items():
+            if any(fpath.endswith(ext) for ext in config_extensions):
+                matches = retention_pattern.findall(content)
+                if matches:
+                    for m in matches[:3]:
+                        retention_found.append((fpath, m))
+
+        if retention_found:
+            return
+
+        # No retention policy detected -- raise a finding
+        config_files_scanned = [
+            f for f in files if any(f.endswith(ext) for ext in config_extensions)
+        ]
+
+        self.add_finding(
+            title="No data retention policy detected",
+            description=(
+                f"Scanned {len(config_files_scanned)} configuration file(s) in the "
+                "container but found no retention, TTL, or expiry settings. "
+                "AI agents that store conversation history, user data, or model "
+                "outputs without a defined retention policy may violate GDPR, "
+                "CCPA, and other data protection regulations."
+            ),
+            severity=Severity.MEDIUM,
+            owasp_llm=["LLM02"],
+            owasp_agentic=["ASI06"],
+            nist_ai_rmf=["GOVERN"],
+            evidence=[
+                Evidence(
+                    type="config",
+                    summary=f"No retention config in {len(config_files_scanned)} config files",
+                    raw_data=(
+                        "Config files scanned:\n"
+                        + "\n".join(f"  {f}" for f in config_files_scanned[:20])
+                        if config_files_scanned
+                        else "No configuration files found in container."
+                    ),
+                    location=f"container:{self.context.container_id}",
+                )
+            ],
+            remediation=(
+                "Define explicit data retention policies in application configuration. "
+                "Set TTL values for stored conversations, logs, and model outputs. "
+                "Implement automated data purging to remove expired records. "
+                "Document the retention schedule and ensure compliance with applicable "
+                "data protection regulations."
+            ),
+            cvss_score=4.0,
+            ai_risk_score=6.0,
+        )
+
+    # ------------------------------------------------------------------
+    # Database credential checks
+    # ------------------------------------------------------------------
+
+    async def _check_database_credentials(self, files: dict[str, str]) -> None:
+        """Scan for database connection strings in files and env vars.
+
+        Uses the ``database_url`` pattern to detect connection strings
+        that embed credentials (e.g. ``postgres://user:pass@host/db``).
+        """
+        db_url_pattern = re.compile(
+            r"(?i)(?:postgres(?:ql)?|mysql|mongodb)://[^\s'\"]{10,}"
+        )
+
+        db_hits: list[tuple[str, str]] = []
+
+        # Scan file contents
+        for fpath, content in files.items():
+            matches = db_url_pattern.findall(content)
+            for m in matches[:3]:
+                db_hits.append((fpath, str(m)))
+
+        # Scan environment variables
+        cid = self.context.container_id
+        if cid:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "docker", "inspect",
+                    "--format", "{{json .Config.Env}}",
+                    cid,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await proc.communicate()
+                if proc.returncode == 0:
+                    env_list = json.loads(stdout.decode(errors="replace"))
+                    for env_str in env_list or []:
+                        if "=" not in env_str:
+                            continue
+                        key, _, value = env_str.partition("=")
+                        if db_url_pattern.search(value):
+                            db_hits.append((f"ENV:{key}", value))
+            except Exception:
+                pass
+
+        if not db_hits:
+            return
+
+        masked_examples = []
+        for source, url in db_hits[:10]:
+            # Mask credentials in the URL (user:pass portion)
+            masked_url = re.sub(
+                r"(://)[^@]+(@)", r"\1****:****\2", url
+            )
+            if len(masked_url) > 80:
+                masked_url = masked_url[:80] + "..."
+            masked_examples.append(f"  {source}: {masked_url}")
+
+        self.add_finding(
+            title="Database connection string with embedded credentials",
+            description=(
+                f"Found {len(db_hits)} database connection string(s) containing "
+                "embedded credentials. Connection strings with plaintext "
+                "usernames and passwords can be extracted from container "
+                "files, environment variables, or image layers, granting "
+                "direct access to backend databases."
+            ),
+            severity=Severity.CRITICAL,
+            owasp_llm=["LLM02"],
+            owasp_agentic=["ASI04"],
+            nist_ai_rmf=["GOVERN"],
+            evidence=[
+                Evidence(
+                    type="file_content",
+                    summary=f"Database URLs with credentials ({len(db_hits)} hits)",
+                    raw_data="\n".join(masked_examples),
+                    location=f"container:{self.context.container_id}",
+                )
+            ],
+            remediation=(
+                "Remove database credentials from connection strings and "
+                "configuration files. Use a secrets manager or IAM-based "
+                "authentication instead of password-based connections. "
+                "If environment variables must be used, inject them at "
+                "runtime via Docker secrets or orchestrator secret stores. "
+                "Rotate any exposed database credentials immediately."
+            ),
+            cvss_score=9.0,
+            ai_risk_score=8.5,
+        )
+
+    # ------------------------------------------------------------------
+    # Backup security checks
+    # ------------------------------------------------------------------
+
+    async def _check_backup_security(self) -> None:
+        """Look for backup files in the container and flag unencrypted ones.
+
+        Searches for common backup extensions (.bak, .dump, .sql, .tar.gz)
+        and checks whether they appear to be encrypted.
+        """
+        cid = self.context.container_id
+        if not cid:
+            return
+
+        backup_extensions = "*.bak *.dump *.sql *.tar.gz *.sql.gz *.bak.gz *.backup"
+        ext_args = " -o ".join(f"-name '{e}'" for e in backup_extensions.split())
+        find_cmd = (
+            f"find {_SCAN_DIRS} -maxdepth 5 -type f \\( {ext_args} \\) "
+            f"-size +0 2>/dev/null | head -50"
+        )
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "exec", cid, "sh", "-c", find_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode != 0:
+                return
+            backup_files = stdout.decode(errors="replace").strip().splitlines()
+        except Exception:
+            return
+
+        if not backup_files:
+            return
+
+        # Check each backup file for encryption indicators
+        unencrypted: list[tuple[str, str]] = []
+        for bfile in backup_files[:20]:
+            bfile = bfile.strip()
+            if not bfile:
+                continue
+            try:
+                # Read first 16 bytes to check for encryption magic bytes
+                proc = await asyncio.create_subprocess_exec(
+                    "docker", "exec", cid,
+                    "sh", "-c", f"head -c 16 '{bfile}' | od -A x -t x1z -N 16 2>/dev/null",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await proc.communicate()
+                header = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+
+                # Get file size
+                proc = await asyncio.create_subprocess_exec(
+                    "docker", "exec", cid,
+                    "sh", "-c", f"ls -lh '{bfile}' 2>/dev/null",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await proc.communicate()
+                file_info = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+
+                # GPG/PGP encrypted files start with specific magic bytes;
+                # if we do not see them, treat the file as unencrypted.
+                is_encrypted = False
+                if header:
+                    # GPG binary: 0x8c, 0xa3, 0xc6 or ASCII-armored starts with "---"
+                    if any(marker in header for marker in ("8c", "a3", "c6")):
+                        is_encrypted = True
+
+                if not is_encrypted:
+                    size_str = file_info.split()[4] if len(file_info.split()) > 4 else "unknown"
+                    unencrypted.append((bfile, size_str))
+
+            except Exception:
+                unencrypted.append((bfile, "unknown"))
+                continue
+
+        if not unencrypted:
+            return
+
+        details = "\n".join(f"  {f} (size: {s})" for f, s in unencrypted[:20])
+
+        self.add_finding(
+            title="Unencrypted backup files found in container",
+            description=(
+                f"Found {len(unencrypted)} backup file(s) in the container that "
+                "do not appear to be encrypted. Backup files may contain "
+                "database dumps, application state, or model data that "
+                "could be exfiltrated if the container is compromised."
+            ),
+            severity=Severity.HIGH,
+            owasp_llm=["LLM02"],
+            nist_ai_rmf=["GOVERN"],
+            evidence=[
+                Evidence(
+                    type="file_content",
+                    summary=f"{len(unencrypted)} unencrypted backup file(s)",
+                    raw_data=details,
+                    location=f"container:{cid}",
+                )
+            ],
+            remediation=(
+                "Encrypt all backup files using GPG, age, or another strong "
+                "encryption tool before storing them in the container or on "
+                "mounted volumes. Ideally, backups should not reside inside "
+                "running containers at all -- store them in a dedicated, "
+                "access-controlled backup system with encryption at rest."
+            ),
+            cvss_score=6.5,
+            ai_risk_score=7.0,
+        )
+
+    # ------------------------------------------------------------------
+    # Data flow mapping
+    # ------------------------------------------------------------------
+
+    async def _check_data_flow_mapping(self) -> None:
+        """Generate a data flow map from environment variables.
+
+        Inspects container environment variables for external connection
+        endpoints (API URLs, database hosts, message queues) and produces
+        a Mermaid diagram summarizing the data flows.
+        """
+        cid = self.context.container_id
+        if not cid:
+            return
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "inspect",
+                "--format", "{{json .Config.Env}}",
+                cid,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode != 0:
+                return
+            env_list = json.loads(stdout.decode(errors="replace"))
+        except Exception:
+            return
+
+        if not env_list:
+            return
+
+        # Patterns to detect external connections
+        url_pattern = re.compile(r"https?://[^\s'\"]+", re.IGNORECASE)
+        db_pattern = re.compile(
+            r"(?i)(?:postgres(?:ql)?|mysql|mongodb|redis|amqp)://[^\s'\"]+",
+        )
+        host_keys = (
+            "host", "hostname", "endpoint", "server", "broker",
+            "queue", "url", "uri", "dsn", "addr",
+        )
+
+        connections: list[dict[str, str]] = []
+        for env_str in env_list or []:
+            if "=" not in env_str:
+                continue
+            key, _, value = env_str.partition("=")
+            if not value:
+                continue
+
+            # Database connections
+            db_match = db_pattern.search(value)
+            if db_match:
+                # Extract scheme and host, masking credentials
+                masked = re.sub(r"(://)[^@]*@", r"\1***@", db_match.group())
+                connections.append({
+                    "env_var": key,
+                    "type": "database",
+                    "target": masked,
+                })
+                continue
+
+            # HTTP/HTTPS URLs
+            url_match = url_pattern.search(value)
+            if url_match:
+                connections.append({
+                    "env_var": key,
+                    "type": "api",
+                    "target": url_match.group()[:120],
+                })
+                continue
+
+            # Host-like keys
+            if any(h in key.lower() for h in host_keys):
+                connections.append({
+                    "env_var": key,
+                    "type": "service",
+                    "target": value[:120],
+                })
+
+        if not connections:
+            return
+
+        # Build Mermaid diagram
+        mermaid_lines = ["graph LR", f"    Container[\"{cid[:12]}...\"]"]
+        seen_targets: set[str] = set()
+
+        for i, conn in enumerate(connections[:25]):
+            target_label = conn["target"]
+            if len(target_label) > 60:
+                target_label = target_label[:57] + "..."
+            node_id = f"ext{i}"
+
+            # Determine node shape by type
+            if conn["type"] == "database":
+                node_def = f"    {node_id}[(\"{target_label}\")]"
+            elif conn["type"] == "api":
+                node_def = f"    {node_id}[\"{target_label}\"]"
+            else:
+                node_def = f"    {node_id}([\"{target_label}\"])"
+
+            edge_label = conn["env_var"]
+            if len(edge_label) > 30:
+                edge_label = edge_label[:27] + "..."
+
+            target_key = f"{conn['type']}:{conn['target']}"
+            if target_key not in seen_targets:
+                seen_targets.add(target_key)
+                mermaid_lines.append(node_def)
+                mermaid_lines.append(
+                    f"    Container -->|{edge_label}| {node_id}"
+                )
+
+        mermaid_diagram = "\n".join(mermaid_lines)
+
+        # Store the data flow map as an informational finding
+        self.add_finding(
+            title="Data flow map generated from container environment",
+            description=(
+                f"Identified {len(connections)} external connection(s) configured "
+                "via environment variables. This data flow map shows how the "
+                "AI agent communicates with external services, databases, and "
+                "APIs. Review the connections to ensure all data flows are "
+                "authorized, encrypted in transit, and aligned with the "
+                "system's intended architecture."
+            ),
+            severity=Severity.INFO,
+            nist_ai_rmf=["MAP"],
+            evidence=[
+                Evidence(
+                    type="config",
+                    summary=f"Data flow map ({len(connections)} connections)",
+                    raw_data=mermaid_diagram,
+                    location=f"container:{cid}",
+                )
+            ],
+            remediation=(
+                "Review the data flow map to verify all external connections are "
+                "intentional and documented. Ensure all connections use TLS/SSL. "
+                "Remove any unnecessary external service dependencies. Document "
+                "the expected data flows as part of the system's security architecture."
+            ),
+            cvss_score=0.0,
+            ai_risk_score=3.0,
+        )

@@ -76,3 +76,75 @@ def test_sha256_hash_string():
 def test_sha256_hash_bytes():
     result = sha256_hash(b"hello")
     assert result == sha256_hash("hello")
+
+
+# ── New v0.3.0 secret patterns ──────────────────────────────────────
+
+def test_detect_secrets_anthropic_key():
+    text = "ANTHROPIC_KEY=sk-ant-abcdefghijklmnopqrstuvwxyz1234567890ab"
+    results = detect_secrets(text)
+    assert any(r["type"] == "anthropic_key" for r in results)
+
+
+def test_detect_secrets_azure_key():
+    text = "AccountKey=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop123456=="
+    results = detect_secrets(text)
+    assert any(r["type"] == "azure_key" for r in results)
+
+
+def test_detect_secrets_gcp_key():
+    text = "key=AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q"
+    results = detect_secrets(text)
+    assert any(r["type"] == "gcp_key" for r in results)
+
+
+def test_detect_secrets_stripe_key():
+    # Use pk_live (publishable) prefix to avoid GitHub push protection
+    text = "STRIPE_KEY=" + "pk_live_" + "a" * 24
+    results = detect_secrets(text)
+    assert any(r["type"] == "stripe_key" for r in results)
+
+
+def test_detect_secrets_sendgrid_key():
+    text = "SENDGRID_API_KEY=SG.abcdefghijklmnopqrstuv.wxyz0123456789ABCDEFabcd"
+    results = detect_secrets(text)
+    assert any(r["type"] == "sendgrid_key" for r in results)
+
+
+def test_detect_secrets_database_url():
+    text = "DATABASE_URL=postgres://user:pass@host:5432/dbname"
+    results = detect_secrets(text)
+    assert any(r["type"] == "database_url" for r in results)
+
+
+def test_detect_secrets_slack_token():
+    # Build token dynamically to avoid GitHub push protection
+    text = "SLACK_TOKEN=" + "xoxb" + "-" + "0" * 10 + "-" + "1" * 13 + "-" + "FAKE"
+    results = detect_secrets(text)
+    assert any(r["type"] == "slack_token" for r in results)
+
+
+# ── New v0.3.0 PII patterns ─────────────────────────────────────────
+
+def test_detect_pii_iban():
+    text = "IBAN: DE89370400440532013000"
+    results = detect_pii(text)
+    assert any(r["type"] == "iban" for r in results)
+
+
+def test_detect_pii_mac_address():
+    text = "MAC: AA:BB:CC:DD:EE:FF"
+    results = detect_pii(text)
+    assert any(r["type"] == "mac_address" for r in results)
+
+
+def test_detect_pii_cuit_argentina():
+    text = "CUIT: 20-12345678-9"
+    results = detect_pii(text)
+    assert any(r["type"] == "cuit_argentina" for r in results)
+
+
+def test_detect_pii_phone_argentina():
+    text = "Tel: +54 9 11 1234 5678"
+    results = detect_pii(text)
+    assert any(r["type"] == "phone_argentina" for r in results)

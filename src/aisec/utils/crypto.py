@@ -17,6 +17,15 @@ SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     "openai_key": re.compile(r"sk-[A-Za-z0-9]{32,}"),
     "anthropic_key": re.compile(r"sk-ant-[A-Za-z0-9_-]{32,}"),
     "slack_token": re.compile(r"xox[baprs]-[A-Za-z0-9\-]+"),
+    "azure_key": re.compile(
+        r"(?i)(?:AccountKey|azure[_\-]?(?:storage|subscription)[_\-]?key)\s*[=:]\s*['\"]?[A-Za-z0-9+/=]{40,}"
+    ),
+    "gcp_key": re.compile(r"AIza[0-9A-Za-z_\-]{35}"),
+    "stripe_key": re.compile(r"(?:sk|pk)_live_[0-9a-zA-Z]{24,}"),
+    "sendgrid_key": re.compile(r"SG\.[A-Za-z0-9_\-]{22,}\.[A-Za-z0-9_\-]{22,}"),
+    "database_url": re.compile(
+        r"(?i)(?:postgres(?:ql)?|mysql|mongodb)://[^\s'\"]{10,}"
+    ),
 }
 
 # PII patterns
@@ -27,6 +36,21 @@ PII_PATTERNS: dict[str, re.Pattern[str]] = {
     "credit_card": re.compile(r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b"),
     "dni_argentina": re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}\b"),
     "ip_address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+    "passport": re.compile(
+        r"\b(?:[A-Z]{1,3})?[0-9]{6,9}\b"
+    ),
+    "iban": re.compile(
+        r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]{0,18})\b"
+    ),
+    "mac_address": re.compile(
+        r"\b[0-9A-Fa-f]{2}([-:])[0-9A-Fa-f]{2}(?:\1[0-9A-Fa-f]{2}){4}\b"
+    ),
+    "phone_argentina": re.compile(
+        r"\+54\s?(?:9\s?)?(?:11|[2-3]\d{2,3})\s?\d{4}[\s-]?\d{4}\b"
+    ),
+    "cuit_argentina": re.compile(
+        r"\b(?:20|23|24|27|30|33|34)\-?\d{8}\-?\d\b"
+    ),
 }
 
 

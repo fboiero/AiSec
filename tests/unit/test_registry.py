@@ -79,7 +79,7 @@ def test_get_enabled_skip():
 def test_register_core_agents():
     register_core_agents()
     all_agents = default_registry.get_all()
-    expected = {"network", "dataflow", "privacy", "prompt_security", "supply_chain", "permission", "output"}
+    expected = {"network", "dataflow", "privacy", "prompt_security", "supply_chain", "permission", "output", "crypto", "sbom"}
     assert expected.issubset(set(all_agents.keys()))
 
 

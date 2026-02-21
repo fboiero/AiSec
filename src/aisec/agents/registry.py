@@ -75,6 +75,8 @@ def register_core_agents() -> None:
     from aisec.agents.supply_chain import SupplyChainAgent
     from aisec.agents.permission import PermissionAgent
     from aisec.agents.output import OutputAgent
+    from aisec.agents.crypto import CryptoAuditAgent
+    from aisec.agents.sbom import SBOMAgent
 
     for agent_cls in (
         NetworkAgent,
@@ -84,6 +86,8 @@ def register_core_agents() -> None:
         SupplyChainAgent,
         PermissionAgent,
         OutputAgent,
+        CryptoAuditAgent,
+        SBOMAgent,
     ):
         default_registry.register(agent_cls)
 

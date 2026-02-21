@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -216,6 +217,130 @@ async def _run_scan(
     return ctx
 
 
+async def _run_scan_with_dashboard(
+    image: str,
+    config: AiSecConfig,
+    verbose: bool,
+) -> ScanContext:
+    """Execute the full scan pipeline with the interactive TUI dashboard.
+
+    Mirrors ``_run_scan`` but replaces the basic Progress bars in Phase 3
+    with the rich Live dashboard.
+    """
+    from aisec.agents.orchestrator import OrchestratorAgent
+    from aisec.agents.registry import register_core_agents, default_registry
+    from aisec.cli.dashboard import ScanDashboard
+    from aisec.docker_.manager import DockerManager
+    from aisec.plugins.loader import discover_plugins
+    from aisec.reports.builder import ReportBuilder
+    from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer
+
+    ctx = ScanContext(
+        target_image=image,
+        target_name=config.target_name or image.split("/")[-1].split(":")[0],
+        config=config,
+    )
+
+    # ── Phase 1: Docker sandbox ──────────────────────────────────────
+    docker_available = False
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        setup_task = progress.add_task("Setting up Docker sandbox...", total=3)
+
+        try:
+            dm = DockerManager(
+                target_image=image,
+                scan_id=str(ctx.scan_id),
+                memory_limit=config.container_memory_limit,
+                cpu_limit=config.container_cpu_limit,
+            )
+            progress.update(setup_task, advance=1, description="Pulling image and starting container...")
+            sandbox = await dm.setup_sandbox()
+            ctx.docker_manager = dm
+            ctx.container_id = sandbox.target.short_id if sandbox.target else None
+            docker_available = True
+            progress.update(setup_task, advance=2, description="Docker sandbox ready")
+        except Exception as exc:
+            progress.update(setup_task, advance=3, description="Docker not available")
+            console.print(
+                f"[warning]Docker sandbox unavailable: {exc}[/warning]\n"
+                "[info]Running static analysis only (no container introspection).[/info]"
+            )
+
+    # ── Phase 2: Register agents ─────────────────────────────────────
+    register_core_agents()
+    registry = default_registry
+
+    plugins = discover_plugins()
+    for plugin in plugins:
+        try:
+            plugin.register_agents(registry)
+            if verbose:
+                console.print(f"  [info]Plugin loaded: {plugin.name} v{plugin.version}[/info]")
+        except Exception as exc:
+            console.print(f"  [warning]Plugin {plugin.name} failed: {exc}[/warning]")
+
+    agent_count = len(registry.get_enabled(config))
+
+    # ── Phase 3: Run orchestrator (with dashboard) ───────────────────
+    orchestrator = OrchestratorAgent(ctx, registry)
+
+    async with ScanDashboard(ctx) as dashboard:
+        dashboard.set_agent_count(agent_count)
+        try:
+            await orchestrator.run_scan()
+        except Exception as exc:
+            console.print(f"[error]Scan error: {exc}[/error]")
+            logger.exception("Scan failed")
+
+    # ── Phase 4: Build report ────────────────────────────────────────
+    console.print("[info]Building report...[/info]")
+    builder = ReportBuilder()
+    report = builder.build(ctx, language=config.report_language)
+
+    # ── Phase 5: Render outputs ──────────────────────────────────────
+    output_dir = Path(config.report_output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base_name = f"aisec-{ctx.target_name}-{str(ctx.scan_id)[:8]}"
+
+    rendered_files: list[Path] = []
+    for fmt in config.report_formats:
+        fmt = fmt.strip().lower()
+        try:
+            if fmt == "json":
+                path = json_renderer.render(report, output_dir / f"{base_name}.json")
+                rendered_files.append(path)
+            elif fmt == "html":
+                path = html_renderer.render(report, output_dir / f"{base_name}.html")
+                rendered_files.append(path)
+            elif fmt == "pdf":
+                path = pdf_renderer.render(report, output_dir / f"{base_name}.pdf")
+                rendered_files.append(path)
+            else:
+                console.print(f"[warning]Unknown format: {fmt}[/warning]")
+        except Exception as exc:
+            console.print(f"[warning]Failed to render {fmt}: {exc}[/warning]")
+            logger.exception("Render failed for format %s", fmt)
+
+    # ── Phase 6: Cleanup ─────────────────────────────────────────────
+    if docker_available and ctx.docker_manager:
+        try:
+            await ctx.docker_manager.cleanup()
+        except Exception:
+            logger.warning("Docker cleanup failed", exc_info=True)
+
+    ctx.metadata["rendered_files"] = [str(p) for p in rendered_files]
+    ctx.metadata["report"] = report
+
+    console.print("[success]Scan complete.[/success]")
+    return ctx
+
+
 @scan_app.callback(invoke_without_command=True)
 def scan(
     image: str = typer.Argument(..., help="Docker image or target to scan."),
@@ -271,6 +396,11 @@ def scan(
         "-v",
         help="Enable verbose output.",
     ),
+    dashboard: bool = typer.Option(
+        True,
+        "--dashboard/--no-dashboard",
+        help="Enable interactive TUI dashboard (default: on for interactive terminals).",
+    ),
 ) -> None:
     """Run a full security analysis scan against a target image."""
     _print_banner()
@@ -301,7 +431,14 @@ def scan(
         console.print(Panel(str(cfg), title="Resolved configuration", style="dim"))
 
     # ── Execute scan ────────────────────────────────────────────────
-    ctx = asyncio.run(_run_scan(image, cfg, verbose))
+    # Use dashboard mode only when explicitly enabled AND in an interactive
+    # terminal (stdout connected to a TTY).
+    use_dashboard = dashboard and sys.stdout.isatty()
+
+    if use_dashboard:
+        ctx = asyncio.run(_run_scan_with_dashboard(image, cfg, verbose))
+    else:
+        ctx = asyncio.run(_run_scan(image, cfg, verbose))
 
     # ── Display results ─────────────────────────────────────────────
     if ctx.agent_results:
