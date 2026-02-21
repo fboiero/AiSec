@@ -77,6 +77,10 @@ def register_core_agents() -> None:
     from aisec.agents.output import OutputAgent
     from aisec.agents.crypto import CryptoAuditAgent
     from aisec.agents.sbom import SBOMAgent
+    from aisec.agents.garak_agent import GarakAgent
+    from aisec.agents.guardrails import GuardrailAgent
+    from aisec.agents.model_scan import ModelScanAgent
+    from aisec.agents.adversarial import AdversarialAgent
 
     for agent_cls in (
         NetworkAgent,
@@ -88,6 +92,10 @@ def register_core_agents() -> None:
         OutputAgent,
         CryptoAuditAgent,
         SBOMAgent,
+        GarakAgent,
+        GuardrailAgent,
+        ModelScanAgent,
+        AdversarialAgent,
     ):
         default_registry.register(agent_cls)
 

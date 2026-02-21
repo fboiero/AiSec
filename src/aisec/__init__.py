@@ -1,3 +1,3 @@
 """AiSec - Deep security analysis framework for autonomous AI agent implementations."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
