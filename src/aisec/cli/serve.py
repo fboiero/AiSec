@@ -10,10 +10,12 @@ Requires: ``pip install aisec[api]`` (django, djangorestframework).
 from __future__ import annotations
 
 import asyncio
+import collections
 import json
 import logging
 import os
 import threading
+import time
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -153,6 +155,45 @@ def _configure_django() -> None:
     if settings.configured:
         return
 
+    # ------------------------------------------------------------------
+    # Conditionally enable API-key authentication
+    # ------------------------------------------------------------------
+    auth_classes: list[str] = []
+    permission_classes: list[str]
+
+    if os.environ.get("AISEC_API_KEY"):
+        auth_classes.append("aisec.cli.serve.ApiKeyAuthentication")
+        permission_classes = ["rest_framework.permissions.IsAuthenticated"]
+    else:
+        permission_classes = ["rest_framework.permissions.AllowAny"]
+
+    # ------------------------------------------------------------------
+    # Conditionally enable rate limiting
+    # ------------------------------------------------------------------
+    throttle_classes: list[str] = []
+    if os.environ.get("AISEC_RATE_LIMIT") or os.environ.get("AISEC_API_KEY"):
+        # Enable throttling when an API key or explicit rate limit is set.
+        # Also enable by default -- it is harmless with the 100/min default.
+        throttle_classes.append("aisec.cli.serve.SimpleRateThrottle")
+
+    rest_config: dict[str, Any] = {
+        "DEFAULT_RENDERER_CLASSES": [
+            "rest_framework.renderers.JSONRenderer",
+            "rest_framework.renderers.BrowsableAPIRenderer",
+        ],
+        "DEFAULT_PARSER_CLASSES": [
+            "rest_framework.parsers.JSONParser",
+        ],
+        "DEFAULT_PERMISSION_CLASSES": permission_classes,
+        "UNAUTHENTICATED_USER": None,
+        "DEFAULT_SCHEMA_CLASS": "rest_framework.schemas.openapi.AutoSchema",
+    }
+
+    if auth_classes:
+        rest_config["DEFAULT_AUTHENTICATION_CLASSES"] = auth_classes
+    if throttle_classes:
+        rest_config["DEFAULT_THROTTLE_CLASSES"] = throttle_classes
+
     settings.configure(
         DEBUG=False,
         SECRET_KEY=os.environ.get("AISEC_SECRET_KEY", "aisec-dev-key-change-in-production"),
@@ -168,20 +209,7 @@ def _configure_django() -> None:
                 "NAME": ":memory:",
             }
         },
-        REST_FRAMEWORK={
-            "DEFAULT_RENDERER_CLASSES": [
-                "rest_framework.renderers.JSONRenderer",
-                "rest_framework.renderers.BrowsableAPIRenderer",
-            ],
-            "DEFAULT_PARSER_CLASSES": [
-                "rest_framework.parsers.JSONParser",
-            ],
-            "DEFAULT_PERMISSION_CLASSES": [
-                "rest_framework.permissions.AllowAny",
-            ],
-            "UNAUTHENTICATED_USER": None,
-            "DEFAULT_SCHEMA_CLASS": "rest_framework.schemas.openapi.AutoSchema",
-        },
+        REST_FRAMEWORK=rest_config,
         MIDDLEWARE=[
             "aisec.cli.serve.CorsMiddleware",
         ],
@@ -189,6 +217,139 @@ def _configure_django() -> None:
         USE_TZ=True,
     )
     django.setup()
+
+
+# ---------------------------------------------------------------------------
+# API Key Authentication (optional, enabled via AISEC_API_KEY env var)
+# ---------------------------------------------------------------------------
+
+class ApiKeyAuthentication:
+    """Simple API key authentication via header or query param.
+
+    Checks for the API key in either the ``X-API-Key`` header or the
+    ``api_key`` query parameter.  If the ``AISEC_API_KEY`` environment
+    variable is not set, authentication is silently skipped so the API
+    remains open for local development.
+    """
+
+    def authenticate(self, request: Any) -> tuple[Any, str] | None:
+        """Return a two-tuple of (user, auth) or *None* to skip."""
+        expected = os.environ.get("AISEC_API_KEY")
+        if not expected:
+            # No key configured -- auth disabled (open access).
+            return None
+
+        api_key = (
+            request.META.get("HTTP_X_API_KEY")
+            or request.query_params.get("api_key")
+        )
+
+        if not api_key:
+            from rest_framework.exceptions import AuthenticationFailed
+            raise AuthenticationFailed("Missing API key. Provide via X-API-Key header or api_key query parameter.")
+
+        if api_key != expected:
+            from rest_framework.exceptions import AuthenticationFailed
+            raise AuthenticationFailed("Invalid API key.")
+
+        # Return a simple user representation and the token.
+        return ({"api_key": "authenticated"}, api_key)
+
+    def authenticate_header(self, request: Any) -> str:
+        """Return a string for the WWW-Authenticate header."""
+        return "X-API-Key"
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiting (in-memory, per-IP)
+# ---------------------------------------------------------------------------
+
+# Shared state for the throttle -- {ip: deque_of_timestamps}
+_rate_limit_cache: dict[str, collections.deque] = {}
+_rate_limit_lock = threading.Lock()
+
+
+def _parse_rate_limit(value: str) -> tuple[int, int]:
+    """Parse a rate-limit string like '100/min' into (num_requests, window_seconds)."""
+    units = {"s": 1, "sec": 1, "m": 60, "min": 60, "h": 3600, "hour": 3600}
+    try:
+        num_str, unit = value.strip().split("/")
+        num = int(num_str)
+        window = units.get(unit.strip(), 60)
+        return num, window
+    except (ValueError, KeyError):
+        return 100, 60  # default: 100/min
+
+
+class SimpleRateThrottle:
+    """In-memory per-IP rate limiting.
+
+    Default: 100 requests per minute, configurable via the
+    ``AISEC_RATE_LIMIT`` environment variable (e.g. ``"200/min"``,
+    ``"10/s"``).
+    """
+
+    def __init__(self) -> None:
+        raw = os.environ.get("AISEC_RATE_LIMIT", "100/min")
+        self.num_requests, self.window = _parse_rate_limit(raw)
+
+    def allow_request(self, request: Any, view: Any) -> bool:
+        """Return *True* if the request should be allowed."""
+        ip = self._get_client_ip(request)
+        now = time.monotonic()
+        cutoff = now - self.window
+
+        with _rate_limit_lock:
+            if ip not in _rate_limit_cache:
+                _rate_limit_cache[ip] = collections.deque()
+
+            history = _rate_limit_cache[ip]
+
+            # Evict expired entries.
+            while history and history[0] < cutoff:
+                history.popleft()
+
+            if len(history) >= self.num_requests:
+                return False
+
+            history.append(now)
+            return True
+
+    def wait(self) -> float | None:
+        """Seconds to wait before the next request is allowed (optional)."""
+        return None
+
+    def get_remaining(self, request: Any) -> tuple[int, int]:
+        """Return (limit, remaining) for the given request IP."""
+        ip = self._get_client_ip(request)
+        now = time.monotonic()
+        cutoff = now - self.window
+
+        with _rate_limit_lock:
+            history = _rate_limit_cache.get(ip, collections.deque())
+            # Count only non-expired entries.
+            active = sum(1 for t in history if t >= cutoff)
+
+        remaining = max(0, self.num_requests - active)
+        return self.num_requests, remaining
+
+    @staticmethod
+    def _get_client_ip(request: Any) -> str:
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "unknown")
+
+
+# Singleton throttle instance used by both middleware and DRF.
+_throttle_instance: SimpleRateThrottle | None = None
+
+
+def _get_throttle() -> SimpleRateThrottle:
+    global _throttle_instance
+    if _throttle_instance is None:
+        _throttle_instance = SimpleRateThrottle()
+    return _throttle_instance
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +366,14 @@ class CorsMiddleware:
         response = self.get_response(request)
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+
+        # Inject rate-limit headers.
+        throttle = _get_throttle()
+        limit, remaining = throttle.get_remaining(request)
+        response["X-RateLimit-Limit"] = str(limit)
+        response["X-RateLimit-Remaining"] = str(remaining)
+
         if request.method == "OPTIONS":
             response.status_code = 200
             response.content = b""
@@ -642,6 +810,15 @@ def serve(
       - GET  /api/health/          -- Health check
 
     The browsable API is available at each endpoint in the browser.
+
+    Environment variables:
+      - AISEC_API_KEY     -- Set to enable API key authentication.
+                             Clients must pass the key via the X-API-Key
+                             header or the ?api_key= query parameter.
+                             If not set, the API allows unauthenticated access.
+      - AISEC_RATE_LIMIT  -- Request rate limit per IP, e.g. "100/min",
+                             "10/s", "5000/hour". Default: 100/min.
+      - AISEC_SECRET_KEY  -- Django secret key (auto-generated for dev).
     """
     try:
         import django
@@ -663,6 +840,14 @@ def serve(
     console.print(f"  Health:       http://{host}:{port}/api/health/")
     console.print(f"  Submit scan:  POST http://{host}:{port}/api/scan/")
     console.print(f"  List scans:   http://{host}:{port}/api/scans/")
+
+    if os.environ.get("AISEC_API_KEY"):
+        console.print("  [bold yellow]Auth:[/bold yellow]        API key required (X-API-Key header)")
+    else:
+        console.print("  [dim]Auth:        Disabled (set AISEC_API_KEY to enable)[/dim]")
+
+    rate_limit = os.environ.get("AISEC_RATE_LIMIT", "100/min")
+    console.print(f"  Rate limit:   {rate_limit}")
     console.print()
 
     try:

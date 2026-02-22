@@ -407,6 +407,12 @@ def scan(
         "--dashboard/--no-dashboard",
         help="Enable interactive TUI dashboard (default: on for interactive terminals).",
     ),
+    profile: Optional[str] = typer.Option(  # noqa: UP007
+        None,
+        "--profile",
+        "-P",
+        help="Target profile (autogpt, crewai, langchain, llamaindex, huggingface, full, quick).",
+    ),
 ) -> None:
     """Run a full security analysis scan against a target image."""
     _print_banner()
@@ -430,6 +436,15 @@ def scan(
         cfg = AiSecConfig.from_yaml(config, **overrides)
     else:
         cfg = AiSecConfig(**overrides)  # type: ignore[arg-type]
+
+    if profile is not None:
+        from aisec.core.target_profiles import get_profile, apply_profile
+        tp = get_profile(profile)
+        if tp is None:
+            console.print(f"[error]Unknown profile: {profile}[/error]")
+            raise typer.Exit(code=1)
+        cfg = apply_profile(cfg, tp)
+        console.print(f"[info]Using profile: [bold]{tp.display_name}[/bold][/info]")
 
     if verbose:
         import logging as _logging

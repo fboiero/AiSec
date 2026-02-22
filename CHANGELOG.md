@@ -5,6 +5,21 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-22
+
+### Added
+- **Presidio PII integration** -- Optional NLP-based PII detection in DataFlowAgent using Microsoft Presidio with confidence scoring, entity grouping, and automatic value masking. Graceful fallback when Presidio is not installed.
+- **detect-secrets integration** -- Optional entropy-based secret scanning in DataFlowAgent using Yelp's detect-secrets library with plugin-based heuristic detection beyond regex patterns.
+- **API authentication** -- Optional API key authentication for the REST API via `AISEC_API_KEY` environment variable. Supports `X-API-Key` header and `api_key` query parameter.
+- **Rate limiting** -- Configurable per-IP sliding-window rate limiting via `AISEC_RATE_LIMIT` environment variable (e.g. `100/min`, `10/s`). Adds `X-RateLimit-Limit` and `X-RateLimit-Remaining` response headers.
+- **Target profiles** -- 8 built-in scan profiles (`autogpt`, `crewai`, `langchain`, `llamaindex`, `openai_assistants`, `huggingface`, `full`, `quick`) with auto-detection from container contents and CLI `--profile` flag.
+- **CORS middleware** -- Standalone CORS middleware for the REST API with rate-limit header injection.
+
+### Changed
+- Plugin development guide expanded from 58 lines to comprehensive 300+ line reference with architecture diagrams, full BaseAgent API reference, ScanContext reference, event system docs, compliance mapping tables, testing patterns, advanced examples, and debugging tips.
+- DataFlowAgent now supports optional Presidio and detect-secrets integrations alongside existing regex-based detection.
+- REST API `_configure_django()` dynamically configures authentication and throttling based on environment variables.
+
 ## [1.1.0] - 2026-02-21
 
 ### Added
@@ -90,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI interface: `aisec scan`, `aisec report`, `aisec config`, `aisec plugins`.
 - Apache 2.0 license.
 
+[1.2.0]: https://github.com/fboiero/AiSec/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fboiero/AiSec/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fboiero/AiSec/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/fboiero/AiSec/compare/v0.3.0...v0.4.0

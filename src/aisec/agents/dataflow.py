@@ -76,7 +76,9 @@ class DataFlowAgent(BaseAgent):
     name: ClassVar[str] = "dataflow"
     description: ClassVar[str] = (
         "Scans container files for PII patterns, plaintext credentials, "
-        "and evaluates data-at-rest encryption."
+        "and evaluates data-at-rest encryption. Optionally integrates with "
+        "Microsoft Presidio for advanced PII detection and detect-secrets "
+        "for entropy-based secret scanning when those libraries are installed."
     )
     phase: ClassVar[AgentPhase] = AgentPhase.DYNAMIC
     frameworks: ClassVar[list[str]] = ["LLM02", "ASI06"]
@@ -91,6 +93,8 @@ class DataFlowAgent(BaseAgent):
 
         await self._check_pii(file_contents)
         await self._check_credentials(file_contents)
+        await self._check_pii_presidio(file_contents)
+        await self._check_secrets_detect_secrets(file_contents)
         await self._check_encryption_at_rest()
         await self._check_unprotected_logs()
         await self._check_data_retention(file_contents)
@@ -214,6 +218,107 @@ class DataFlowAgent(BaseAgent):
             )
 
     # ------------------------------------------------------------------
+    # PII checks -- Presidio (optional)
+    # ------------------------------------------------------------------
+
+    async def _check_pii_presidio(self, files: dict[str, str]) -> None:
+        """Use Microsoft Presidio for advanced PII detection if installed.
+
+        This is an optional enhancement that provides NLP-based PII
+        recognition beyond the regex patterns in :meth:`_check_pii`.
+        If ``presidio_analyzer`` is not installed the method returns
+        silently so the agent continues to work with regex-only detection.
+        """
+        try:
+            from presidio_analyzer import AnalyzerEngine, RecognizerResult  # noqa: F811
+        except ImportError:
+            logger.debug(
+                "presidio_analyzer not installed -- skipping Presidio PII check. "
+                "Install with: pip install presidio-analyzer"
+            )
+            return
+
+        analyzer = AnalyzerEngine()
+
+        # Aggregate results by entity type across all files
+        entity_hits: dict[str, list[tuple[str, float, str]]] = {}
+        # entity_type -> [(file, score, snippet)]
+
+        for fpath, content in files.items():
+            if not content.strip():
+                continue
+            try:
+                results: list[RecognizerResult] = await asyncio.to_thread(
+                    analyzer.analyze,
+                    text=content,
+                    language="en",
+                )
+            except Exception as exc:
+                logger.debug("Presidio analysis failed for %s: %s", fpath, exc)
+                continue
+
+            for result in results:
+                if result.score < 0.7:
+                    continue
+                snippet = content[result.start : result.end]
+                entity_hits.setdefault(result.entity_type, []).append(
+                    (fpath, result.score, snippet)
+                )
+
+        if not entity_hits:
+            return
+
+        for entity_type, hits in entity_hits.items():
+            masked_examples = []
+            for fpath, score, snippet in hits[:10]:
+                if len(snippet) > 5:
+                    masked = snippet[:3] + "***" + snippet[-2:]
+                else:
+                    masked = "***"
+                masked_examples.append(
+                    f"  {fpath}: {masked} (confidence: {score:.2f})"
+                )
+
+            self.add_finding(
+                title=f"PII detected by Presidio: {entity_type}",
+                description=(
+                    f"Microsoft Presidio detected {len(hits)} high-confidence "
+                    f"instance(s) of '{entity_type}' across container files. "
+                    f"Presidio uses NLP-based recognition which can detect PII "
+                    f"that simple regex patterns may miss, including names, "
+                    f"addresses, and context-dependent identifiers."
+                ),
+                severity=Severity.HIGH,
+                owasp_llm=["LLM02"],
+                owasp_agentic=["ASI06"],
+                nist_ai_rmf=["GOVERN", "MAP"],
+                evidence=[
+                    Evidence(
+                        type="file_content",
+                        summary=(
+                            f"Presidio {entity_type} detections "
+                            f"({len(hits)} hits, score >= 0.7)"
+                        ),
+                        raw_data="\n".join(masked_examples),
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Remove or encrypt PII data at rest. Implement data minimization "
+                    "practices -- only store PII that is strictly necessary. Use "
+                    "tokenization or pseudonymization for data the agent needs to "
+                    "process. Consider integrating Presidio as a real-time data "
+                    "sanitizer in your application's data pipeline."
+                ),
+                references=[
+                    "https://microsoft.github.io/presidio/",
+                    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                ],
+                cvss_score=6.5,
+                ai_risk_score=7.0,
+            )
+
+    # ------------------------------------------------------------------
     # Credential / secret checks
     # ------------------------------------------------------------------
 
@@ -311,6 +416,105 @@ class DataFlowAgent(BaseAgent):
                 hits.append((f"ENV:{key}", value))
 
         return hits
+
+    # ------------------------------------------------------------------
+    # Secret checks -- detect-secrets (optional)
+    # ------------------------------------------------------------------
+
+    async def _check_secrets_detect_secrets(self, files: dict[str, str]) -> None:
+        """Use detect-secrets for entropy-based secret scanning if installed.
+
+        This is an optional enhancement that provides high-entropy string
+        detection and plugin-based secret scanning beyond the regex patterns
+        in :meth:`_check_credentials`.  If ``detect_secrets`` is not
+        installed the method returns silently.
+        """
+        try:
+            from detect_secrets import settings as ds_settings
+            from detect_secrets.core.scan import scan_line
+            from detect_secrets.settings import default_settings
+        except ImportError:
+            logger.debug(
+                "detect-secrets not installed -- skipping entropy-based secret scan. "
+                "Install with: pip install detect-secrets"
+            )
+            return
+
+        secret_hits: list[tuple[str, str, str]] = []
+        # (file, secret_type, masked_value)
+
+        for fpath, content in files.items():
+            if not content.strip():
+                continue
+            try:
+                with default_settings():
+                    for line_num, line in enumerate(content.splitlines(), start=1):
+                        secrets = scan_line(fpath, line)
+                        for secret in secrets:
+                            secret_type = secret.type
+                            # Mask the detected value
+                            raw = line.strip()
+                            if len(raw) > 8:
+                                masked = raw[:4] + "****" + raw[-4:]
+                            else:
+                                masked = "****"
+                            secret_hits.append((
+                                f"{fpath}:{line_num}",
+                                secret_type,
+                                masked,
+                            ))
+            except Exception as exc:
+                logger.debug("detect-secrets scan failed for %s: %s", fpath, exc)
+                continue
+
+        if not secret_hits:
+            return
+
+        # Group by secret type
+        by_type: dict[str, list[tuple[str, str]]] = {}
+        for location, secret_type, masked in secret_hits:
+            by_type.setdefault(secret_type, []).append((location, masked))
+
+        for secret_type, hits in by_type.items():
+            details = "\n".join(
+                f"  {loc}: {masked}" for loc, masked in hits[:10]
+            )
+            self.add_finding(
+                title=f"Secret detected by detect-secrets: {secret_type}",
+                description=(
+                    f"The detect-secrets library identified {len(hits)} "
+                    f"potential secret(s) of type '{secret_type}' in container "
+                    f"files. detect-secrets uses entropy analysis and plugin-based "
+                    f"heuristics to find secrets that pattern matching may miss, "
+                    f"including high-entropy strings, base64-encoded tokens, and "
+                    f"vendor-specific credential formats."
+                ),
+                severity=Severity.HIGH,
+                owasp_llm=["LLM02"],
+                owasp_agentic=["ASI06"],
+                nist_ai_rmf=["GOVERN"],
+                evidence=[
+                    Evidence(
+                        type="file_content",
+                        summary=f"detect-secrets: {secret_type} ({len(hits)} hits)",
+                        raw_data=details,
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Remove hardcoded secrets from source code and configuration "
+                    "files. Use a secrets manager (e.g., HashiCorp Vault, AWS "
+                    "Secrets Manager) or Docker secrets. Consider adding a "
+                    "detect-secrets pre-commit hook to prevent secrets from "
+                    "being committed to version control. Rotate any exposed "
+                    "credentials immediately."
+                ),
+                references=[
+                    "https://github.com/Yelp/detect-secrets",
+                ],
+                cvss_score=7.5,
+                ai_risk_score=8.0,
+            )
 
     # ------------------------------------------------------------------
     # Encryption at rest
