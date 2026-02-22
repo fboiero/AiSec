@@ -173,6 +173,7 @@ class AdversarialAgent(BaseAgent):
         await self._check_resource_exhaustion(container_info, source_files)
         await self._check_multi_turn_manipulation(source_files)
         await self._check_tool_injection(source_files)
+        await self._check_membership_inference(source_files)
 
     # ------------------------------------------------------------------
     # Container / file helpers
@@ -1155,4 +1156,288 @@ class AdversarialAgent(BaseAgent):
             ],
             cvss_score=9.0 if worst_severity == Severity.CRITICAL else 7.0,
             ai_risk_score=8.5,
+        )
+
+    # ------------------------------------------------------------------
+    # 8. Membership inference risk assessment
+    # ------------------------------------------------------------------
+
+    async def _check_membership_inference(self, source_files: dict[str, str]) -> None:
+        """Assess membership inference attack risks across model training,
+        serving, and privacy posture."""
+        issues: list[tuple[str, Severity, str]] = []
+
+        # ---- 1. Memorization pattern detection ----
+        memorization_patterns = [
+            re.compile(r"(?i)\b(?:training_data|train_set|dataset|fine[\-_]?tune)\b"),
+        ]
+        memorization_output_patterns = [
+            re.compile(r"(?i)\b(?:verbatim|memorize|memorization|overfit)\b"),
+        ]
+
+        memorization_hits: list[tuple[str, str]] = []  # (description, file)
+        for fpath, content in source_files.items():
+            for pattern in memorization_patterns:
+                if pattern.search(content):
+                    memorization_hits.append((
+                        f"Training data reference found in {fpath}",
+                        fpath,
+                    ))
+                    break
+            for pattern in memorization_output_patterns:
+                if pattern.search(content):
+                    memorization_hits.append((
+                        f"Memorization/overfitting indicator in {fpath}",
+                        fpath,
+                    ))
+                    break
+
+        if memorization_hits:
+            issues.append((
+                f"Memorization risk: {len(memorization_hits)} file(s) contain training "
+                "data references or memorization indicators co-located with inference "
+                "code. Models trained alongside serving code are more likely to leak "
+                "training data through membership inference attacks.",
+                Severity.MEDIUM,
+                "Separate training artifacts from inference/serving code. Never store "
+                "raw training data in the same deployment as the model endpoint. "
+                "Apply memorization-aware training techniques such as deduplication "
+                "and early stopping.",
+            ))
+
+        # ---- 2. Training data extraction risk ----
+        artifact_patterns = [
+            re.compile(r"(?i)\b(?:model_weights|checkpoint|saved_model)\b"),
+        ]
+        internal_patterns = [
+            re.compile(r"(?i)\b(?:logits|embeddings|attention_weights|hidden_states|gradients)\b"),
+        ]
+
+        exposed_artifacts: list[tuple[str, str]] = []
+        exposed_internals: list[tuple[str, str]] = []
+
+        for fpath, content in source_files.items():
+            for pattern in artifact_patterns:
+                for match in pattern.finditer(content):
+                    start = max(0, match.start() - 30)
+                    end = min(len(content), match.end() + 60)
+                    snippet = content[start:end].strip().replace("\n", " ")
+                    exposed_artifacts.append((fpath, snippet))
+                    break  # One hit per file per category is enough
+
+            for pattern in internal_patterns:
+                for match in pattern.finditer(content):
+                    start = max(0, match.start() - 30)
+                    end = min(len(content), match.end() + 60)
+                    snippet = content[start:end].strip().replace("\n", " ")
+                    exposed_internals.append((fpath, snippet))
+                    break
+
+        if exposed_artifacts:
+            issues.append((
+                f"Training artifact exposure: {len(exposed_artifacts)} file(s) reference "
+                "model weights, checkpoints, or saved models without apparent access "
+                "controls. Unrestricted access to training artifacts simplifies model "
+                "extraction and membership inference attacks.",
+                Severity.HIGH,
+                "Restrict access to model weights and checkpoints using authentication "
+                "and authorization. Store training artifacts in a secure, isolated "
+                "location with audit logging.",
+            ))
+
+        if exposed_internals:
+            issues.append((
+                f"Model internals exposed: {len(exposed_internals)} file(s) expose "
+                "logits, embeddings, attention weights, hidden states, or gradients. "
+                "These internal representations provide the signal needed to mount "
+                "high-confidence membership inference attacks.",
+                Severity.HIGH,
+                "Do not expose raw logits, embeddings, or gradient information through "
+                "API responses. Return only final predictions or apply output "
+                "perturbation (e.g., temperature scaling, top-k filtering) to reduce "
+                "information leakage.",
+            ))
+
+        # ---- 3. Differential privacy evaluation ----
+        dp_patterns = [
+            re.compile(r"(?i)\b(?:opacus|dp_sgd|differential_privacy|privacy_budget)\b"),
+            re.compile(r"(?i)\b(?:epsilon|noise_multiplier|clip_norm|dp_optimizer)\b"),
+        ]
+        training_code_patterns = [
+            re.compile(r"(?i)\b(?:train|fit|backward|optimizer\.step|loss\.backward)\b"),
+        ]
+
+        has_dp_implementation = False
+        has_training_code = False
+
+        for fpath, content in source_files.items():
+            for pattern in dp_patterns:
+                if pattern.search(content):
+                    has_dp_implementation = True
+                    break
+            for pattern in training_code_patterns:
+                if pattern.search(content):
+                    has_training_code = True
+                    break
+
+        if has_training_code and not has_dp_implementation:
+            issues.append((
+                "Model training code detected without differential privacy (DP) "
+                "implementation. Training without DP guarantees makes the model "
+                "vulnerable to membership inference attacks, as the model may "
+                "memorize individual training examples.",
+                Severity.MEDIUM,
+                "Integrate differential privacy into the training pipeline using "
+                "libraries such as Opacus (PyTorch) or TensorFlow Privacy. Set an "
+                "appropriate privacy budget (epsilon) and track cumulative privacy "
+                "loss across training epochs.",
+            ))
+        elif has_dp_implementation:
+            issues.append((
+                "Differential privacy implementation detected. Verify that the "
+                "privacy budget (epsilon) is appropriately bounded and that noise "
+                "multiplier and clipping norm are correctly configured.",
+                Severity.INFO,
+                "Audit the DP configuration: ensure epsilon is below 10 for "
+                "meaningful privacy guarantees. Monitor cumulative privacy loss "
+                "and retrain with tighter bounds if needed.",
+            ))
+
+        # ---- 4. Canary value detection ----
+        canary_patterns = [
+            re.compile(r"(?i)\b(?:canary|sentinel|test_sample|membership_test|audit_data)\b"),
+        ]
+
+        has_canary = False
+        for fpath, content in source_files.items():
+            for pattern in canary_patterns:
+                if pattern.search(content):
+                    has_canary = True
+                    break
+            if has_canary:
+                break
+
+        if has_canary:
+            issues.append((
+                "Canary/sentinel value patterns detected. This indicates awareness "
+                "of membership inference risks and proactive monitoring for data "
+                "leakage through canary-based auditing.",
+                Severity.INFO,
+                "Continue canary-based auditing. Ensure canary values are rotated "
+                "periodically and that detection thresholds are calibrated against "
+                "the model's false positive rate.",
+            ))
+
+        # ---- 5. Privacy risk scoring ----
+        privacy_risk_patterns = [
+            re.compile(r"(?i)\b(?:privacy[\-_]?risk[\-_]?scor|privacy[\-_]?budget)\b"),
+            re.compile(r"(?i)\b(?:privacy[\-_]?impact|PIA|DPIA)\b"),
+        ]
+
+        has_privacy_scoring = False
+        for fpath, content in source_files.items():
+            for pattern in privacy_risk_patterns:
+                if pattern.search(content):
+                    has_privacy_scoring = True
+                    break
+            if has_privacy_scoring:
+                break
+
+        if not has_privacy_scoring:
+            # Only flag if there is meaningful ML activity
+            if has_training_code or memorization_hits or exposed_artifacts or exposed_internals:
+                issues.append((
+                    "No privacy risk scoring or privacy impact assessment detected "
+                    "despite the presence of ML training or model artifacts. A formal "
+                    "privacy risk assessment is essential for quantifying and managing "
+                    "membership inference and data extraction risks.",
+                    Severity.MEDIUM,
+                    "Implement a privacy impact assessment (PIA/DPIA) process. "
+                    "Quantify membership inference risk using shadow model evaluation "
+                    "or likelihood ratio tests. Track privacy risk scores alongside "
+                    "model performance metrics.",
+                ))
+
+        # ---- Emit combined finding ----
+        if not issues:
+            return
+
+        actionable = [i for i in issues if i[1] != Severity.INFO]
+        if not actionable:
+            worst_severity = Severity.INFO
+        else:
+            worst_severity = min(
+                (s for _, s, _ in actionable),
+                key=lambda s: list(Severity).index(s),
+            )
+
+        evidence_lines: list[str] = []
+        for desc, sev, _ in issues:
+            evidence_lines.append(f"  [{sev.value.upper()}] {desc}")
+
+        if exposed_artifacts:
+            evidence_lines.append("  Artifact references:")
+            for fpath, snippet in exposed_artifacts[:10]:
+                evidence_lines.append(f"    {fpath}: {snippet[:100]}")
+
+        if exposed_internals:
+            evidence_lines.append("  Model internal references:")
+            for fpath, snippet in exposed_internals[:10]:
+                evidence_lines.append(f"    {fpath}: {snippet[:100]}")
+
+        details = "\n".join(evidence_lines)
+
+        remediation_lines = "\n".join(
+            f"  - {rem}" for _, _, rem in issues if rem
+        )
+
+        num_critical = sum(1 for _, s, _ in issues if s == Severity.CRITICAL)
+        num_high = sum(1 for _, s, _ in issues if s == Severity.HIGH)
+        num_medium = sum(1 for _, s, _ in issues if s == Severity.MEDIUM)
+        num_info = sum(1 for _, s, _ in issues if s == Severity.INFO)
+
+        # Determine CVSS score based on worst severity
+        if worst_severity == Severity.CRITICAL:
+            cvss = 9.0
+        elif worst_severity == Severity.HIGH:
+            cvss = 7.5
+        elif worst_severity == Severity.MEDIUM:
+            cvss = 5.5
+        else:
+            cvss = 3.0
+
+        self.add_finding(
+            title=f"Membership inference risk ({len(issues)} issues)",
+            description=(
+                f"Found {len(issues)} membership inference risk indicator(s): "
+                f"{num_critical} critical, {num_high} high, {num_medium} medium, "
+                f"{num_info} informational. Membership inference attacks allow an "
+                "adversary to determine whether a specific data point was part of "
+                "the model's training set. Successful attacks can reveal sensitive "
+                "training data, violate privacy regulations, and undermine user trust. "
+                "Risks are amplified when model internals (logits, gradients) are "
+                "exposed, training data is co-located with inference code, or "
+                "differential privacy is not implemented."
+            ),
+            severity=worst_severity,
+            owasp_llm=["LLM02", "LLM04"],
+            owasp_agentic=["ASI01"],
+            nist_ai_rmf=["MEASURE", "MANAGE"],
+            evidence=[
+                Evidence(
+                    type="file_content",
+                    summary=f"Membership inference risks ({len(issues)} indicators)",
+                    raw_data=details,
+                    location=f"container:{self.context.container_id}",
+                )
+            ],
+            remediation=remediation_lines,
+            references=[
+                "https://arxiv.org/abs/1610.05820",
+                "https://arxiv.org/abs/2112.03570",
+                "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                "https://github.com/pytorch/opacus",
+            ],
+            cvss_score=cvss,
+            ai_risk_score=7.5,
         )

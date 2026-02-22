@@ -10,6 +10,7 @@ Requires: ``pip install aisec[api]`` (django, djangorestframework).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -32,12 +33,44 @@ serve_app = typer.Typer(help="Start the AiSec REST API server.")
 # ---------------------------------------------------------------------------
 
 _scan_store: dict[str, dict[str, Any]] = {}
+_webhook_store: dict[str, dict[str, Any]] = {}
 _start_time = datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
 # Background scan runner (thread-based for Django's sync views)
 # ---------------------------------------------------------------------------
+
+def _dispatch_webhooks(event: str, payload: dict[str, Any]) -> None:
+    """Send event notifications to all registered webhooks."""
+    import hashlib
+    import hmac
+    from urllib.request import Request, urlopen
+
+    for wh_id, wh in list(_webhook_store.items()):
+        # Check event filter
+        events = wh.get("events", ["scan.completed", "scan.failed"])
+        if event not in events:
+            continue
+
+        url = wh["url"]
+        body = json.dumps({"event": event, "payload": payload}).encode()
+
+        headers = {"Content-Type": "application/json", "X-AiSec-Event": event}
+
+        # Sign payload if secret is set
+        secret = wh.get("secret")
+        if secret:
+            sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+            headers["X-AiSec-Signature"] = f"sha256={sig}"
+
+        try:
+            req = Request(url, data=body, headers=headers, method="POST")
+            urlopen(req, timeout=10)  # noqa: S310
+            logger.info("Webhook %s dispatched to %s", event, url)
+        except Exception as exc:
+            logger.warning("Webhook %s to %s failed: %s", event, url, exc)
+
 
 def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
                         skip_agents: list[str], formats: list[str],
@@ -85,11 +118,27 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
         _scan_store[scan_id]["report"] = report_dict
         _scan_store[scan_id]["finding_count"] = report.executive_summary.total_findings
 
+        _dispatch_webhooks("scan.completed", {
+            "scan_id": scan_id,
+            "image": image,
+            "finding_count": report.executive_summary.total_findings,
+            "critical_count": report.executive_summary.critical_count,
+            "high_count": report.executive_summary.high_count,
+            "completed_at": _scan_store[scan_id]["completed_at"],
+        })
+
     except Exception as exc:
         logger.exception("Scan %s failed", scan_id)
         _scan_store[scan_id]["status"] = "failed"
         _scan_store[scan_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
         _scan_store[scan_id]["error"] = str(exc)
+
+        _dispatch_webhooks("scan.failed", {
+            "scan_id": scan_id,
+            "image": image,
+            "error": str(exc),
+            "completed_at": _scan_store[scan_id]["completed_at"],
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -210,11 +259,45 @@ def _get_serializers() -> dict[str, Any]:
         agents = serializers.IntegerField()
         uptime_seconds = serializers.FloatField()
 
+    class WebhookSerializer(serializers.Serializer):
+        url = serializers.URLField(help_text="Webhook endpoint URL")
+        secret = serializers.CharField(
+            required=False, default="",
+            help_text="HMAC-SHA256 secret for payload signing")
+        events = serializers.ListField(
+            child=serializers.CharField(),
+            default=["scan.completed", "scan.failed"],
+            help_text="Events to subscribe to")
+
+    class WebhookResponseSerializer(serializers.Serializer):
+        webhook_id = serializers.CharField()
+        url = serializers.CharField()
+        events = serializers.ListField(child=serializers.CharField())
+
+    class BatchScanRequestSerializer(serializers.Serializer):
+        images = serializers.ListField(
+            child=serializers.CharField(),
+            help_text="List of Docker images to scan")
+        agents = serializers.ListField(
+            child=serializers.CharField(), default=["all"],
+            help_text="Agents to run")
+        skip_agents = serializers.ListField(
+            child=serializers.CharField(), default=[],
+            help_text="Agents to skip")
+        formats = serializers.ListField(
+            child=serializers.CharField(), default=["json"],
+            help_text="Output formats")
+        language = serializers.CharField(
+            default="en", help_text="Report language (en/es)")
+
     return {
         "ScanRequestSerializer": ScanRequestSerializer,
         "ScanStatusSerializer": ScanStatusSerializer,
         "ScanResultSerializer": ScanResultSerializer,
         "HealthSerializer": HealthSerializer,
+        "WebhookSerializer": WebhookSerializer,
+        "WebhookResponseSerializer": WebhookResponseSerializer,
+        "BatchScanRequestSerializer": BatchScanRequestSerializer,
     }
 
 
@@ -354,12 +437,122 @@ def _get_views() -> dict[str, Any]:
             status=status.HTTP_200_OK,
         )
 
+    # -- Webhook management views -------------------------------------------
+
+    WebhookSerializer = serializers["WebhookSerializer"]
+    WebhookResponseSerializer = serializers["WebhookResponseSerializer"]
+    BatchScanRequestSerializer = serializers["BatchScanRequestSerializer"]
+
+    @api_view(["GET", "POST"])
+    def webhooks(request: Any) -> Response:
+        """Register or list webhook endpoints.
+
+        POST: Register a new webhook with URL, optional secret, and event filter.
+        GET: List all registered webhooks.
+        """
+        if request.method == "POST":
+            serializer = WebhookSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            validated = serializer.validated_data
+            wh_id = str(uuid.uuid4())[:8]
+            _webhook_store[wh_id] = {
+                "webhook_id": wh_id,
+                "url": validated["url"],
+                "secret": validated.get("secret", ""),
+                "events": validated.get("events", ["scan.completed", "scan.failed"]),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            result = WebhookResponseSerializer({
+                "webhook_id": wh_id,
+                "url": validated["url"],
+                "events": _webhook_store[wh_id]["events"],
+            })
+            return Response(result.data, status=status.HTTP_201_CREATED)
+
+        # GET
+        items = [
+            {"webhook_id": wh["webhook_id"], "url": wh["url"], "events": wh["events"]}
+            for wh in _webhook_store.values()
+        ]
+        result = WebhookResponseSerializer(items, many=True)
+        return Response(result.data)
+
+    @api_view(["DELETE"])
+    def delete_webhook(request: Any, webhook_id: str) -> Response:
+        """Remove a registered webhook."""
+        if webhook_id not in _webhook_store:
+            return Response(
+                {"detail": f"Webhook {webhook_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        del _webhook_store[webhook_id]
+        return Response({"detail": f"Webhook {webhook_id} deleted"})
+
+    # -- Batch scanning view -----------------------------------------------
+
+    @api_view(["POST"])
+    def batch_scan(request: Any) -> Response:
+        """Submit multiple images for scanning in parallel.
+
+        Each image is scanned independently with the same configuration.
+        Returns a list of scan IDs for polling.
+        """
+        serializer = BatchScanRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        validated = serializer.validated_data
+        images = validated["images"]
+        if not images:
+            return Response(
+                {"detail": "At least one image is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        scan_ids = []
+        for image in images:
+            scan_id = str(uuid.uuid4())
+            _scan_store[scan_id] = {
+                "scan_id": scan_id,
+                "status": "pending",
+                "image": image,
+                "started_at": None,
+                "completed_at": None,
+                "finding_count": 0,
+                "report": None,
+                "error": None,
+            }
+            t = threading.Thread(
+                target=_run_scan_in_thread,
+                args=(
+                    scan_id,
+                    image,
+                    validated.get("agents", ["all"]),
+                    validated.get("skip_agents", []),
+                    validated.get("formats", ["json"]),
+                    validated.get("language", "en"),
+                ),
+                daemon=True,
+            )
+            t.start()
+            scan_ids.append({"scan_id": scan_id, "image": image})
+
+        return Response(
+            {"batch_size": len(images), "scans": scan_ids},
+            status=status.HTTP_201_CREATED,
+        )
+
     return {
         "health_check": health_check,
         "create_scan": create_scan,
         "get_scan": get_scan,
         "list_scans": list_scans,
         "delete_scan": delete_scan,
+        "webhooks": webhooks,
+        "delete_webhook": delete_webhook,
+        "batch_scan": batch_scan,
     }
 
 
@@ -375,9 +568,12 @@ def _build_urlpatterns() -> list[Any]:
     return [
         path("api/health/", views["health_check"], name="health"),
         path("api/scan/", views["create_scan"], name="create-scan"),
+        path("api/scan/batch/", views["batch_scan"], name="batch-scan"),
         path("api/scan/<str:scan_id>/", views["get_scan"], name="get-scan"),
         path("api/scans/", views["list_scans"], name="list-scans"),
         path("api/scan/<str:scan_id>/delete/", views["delete_scan"], name="delete-scan"),
+        path("api/webhooks/", views["webhooks"], name="webhooks"),
+        path("api/webhooks/<str:webhook_id>/", views["delete_webhook"], name="delete-webhook"),
     ]
 
 
@@ -436,11 +632,14 @@ def serve(
     Requires: pip install aisec[api]
 
     The API provides endpoints for:
-      - POST /api/scan/          -- Submit a new security scan
-      - GET  /api/scan/{id}/     -- Retrieve scan results
-      - GET  /api/scans/         -- List all scans
+      - POST /api/scan/            -- Submit a new security scan
+      - POST /api/scan/batch/      -- Scan multiple images at once
+      - GET  /api/scan/{id}/       -- Retrieve scan results
+      - GET  /api/scans/           -- List all scans
       - DELETE /api/scan/{id}/delete/ -- Delete a scan
-      - GET  /api/health/        -- Health check
+      - GET/POST /api/webhooks/    -- Manage webhook notifications
+      - DELETE /api/webhooks/{id}/ -- Remove a webhook
+      - GET  /api/health/          -- Health check
 
     The browsable API is available at each endpoint in the browser.
     """

@@ -5,6 +5,21 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-21
+
+### Added
+- **Data Anonymization Verifier** (M2.4) -- 5 checks in PrivacyAgent: anonymization/pseudonymization implementation, re-identification risk via quasi-identifiers, k-anonymity assessment, data masking in logs, and PII in caches/temp files.
+- **Model Theft & Extraction Detection** (M3.5) -- 5 checks in NetworkAgent: rate limiting on inference endpoints, query logging/monitoring, output perturbation mechanisms, API authentication on model endpoints, and model versioning/access control.
+- **Membership Inference Risk Assessment** (M3.6) -- 5 checks in AdversarialAgent: memorization pattern detection, training data extraction risk, differential privacy evaluation, canary value detection, and privacy risk scoring.
+- **Webhook notifications** -- REST API support for event-driven notifications on scan completion/failure with HMAC-SHA256 payload signing, event filtering, and webhook management endpoints.
+- **Multi-target scanning** -- CLI `aisec scan run img1,img2,img3` and REST API `POST /api/scan/batch/` for scanning multiple images in a single invocation.
+- **Baseline management** -- Save named baselines from scans, compare current scans against baselines to detect regressions, and track new/resolved findings.
+- **Shared scan policies** -- Named configuration presets stored in SQLite for team-wide consistent scanning.
+
+### Changed
+- REST API extended with 3 new endpoints: `/api/scan/batch/`, `/api/webhooks/`, `/api/webhooks/{id}/`.
+- `ScanHistory` extended with baselines and scan_policies tables plus management methods.
+
 ## [1.0.0] - 2026-02-21
 
 ### Added
@@ -75,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI interface: `aisec scan`, `aisec report`, `aisec config`, `aisec plugins`.
 - Apache 2.0 license.
 
+[1.1.0]: https://github.com/fboiero/AiSec/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fboiero/AiSec/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/fboiero/AiSec/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/fboiero/AiSec/compare/v0.2.0...v0.3.0

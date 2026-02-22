@@ -41,6 +41,7 @@ class PrivacyAgent(BaseAgent):
         await self._check_gdpr(has_pii, has_secrets, has_log_issues, container_info)
         await self._check_ccpa(has_pii, has_secrets, has_log_issues, container_info)
         await self._check_habeas_data(has_pii, has_secrets, has_log_issues, container_info)
+        await self._check_anonymization(has_pii, container_info)
 
     # ------------------------------------------------------------------
     # Container env helper
@@ -113,6 +114,352 @@ class PrivacyAgent(BaseAgent):
             return stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
         except Exception:
             return ""
+
+    # ------------------------------------------------------------------
+    # Data anonymization verification (M2.4)
+    # ------------------------------------------------------------------
+
+    async def _check_anonymization(
+        self,
+        has_pii: bool,
+        env: dict[str, str],
+    ) -> None:
+        """Data anonymization verification checks.
+
+        Implements M2.4 from the project plan. Verifies that proper
+        anonymization and pseudonymization techniques are applied to
+        protect personal data processed by the AI agent.
+        """
+
+        # ----------------------------------------------------------
+        # 1. Anonymization / pseudonymization implementation
+        # ----------------------------------------------------------
+        anon_patterns = (
+            "anonymi\\|pseudonymi\\|hash_pii\\|mask_pii"
+            "\\|tokenize\\|k.anonymity\\|differential.privacy\\|faker"
+        )
+        anon_refs = await self._grep_container(anon_patterns)
+
+        if not anon_refs and has_pii:
+            self.add_finding(
+                title="No anonymization or pseudonymization implementation detected",
+                description=(
+                    "The container processes PII but no anonymization or "
+                    "pseudonymization mechanisms were found. Data protection "
+                    "regulations (GDPR Art. 25, CCPA) recommend or require "
+                    "pseudonymization as a safeguard. Common techniques "
+                    "include hashing, tokenization, k-anonymity, "
+                    "differential privacy, and data masking."
+                ),
+                severity=Severity.HIGH,
+                owasp_llm=["LLM02"],
+                nist_ai_rmf=["GOVERN", "MAP", "MANAGE"],
+                evidence=[
+                    Evidence(
+                        type="code",
+                        summary="No anonymization patterns found in container source",
+                        raw_data=(
+                            f"Searched patterns: {anon_patterns}\n"
+                            "Matching files: none\n"
+                            "PII detected by dataflow agent: True"
+                        ),
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Implement data anonymization or pseudonymization before "
+                    "processing PII. Consider using libraries such as Faker "
+                    "(synthetic data), Microsoft Presidio (PII detection and "
+                    "anonymization), or ARX (k-anonymity / l-diversity). Apply "
+                    "pseudonymization at the ingestion boundary so that "
+                    "downstream components never see raw identifiers."
+                ),
+                references=[
+                    "https://gdpr.eu/recital-26-not-applicable-to-anonymous-data/",
+                    "https://microsoft.github.io/presidio/",
+                    "https://arx.deidentifier.org/",
+                ],
+                cvss_score=6.5,
+                ai_risk_score=8.0,
+            )
+
+        # ----------------------------------------------------------
+        # 2. Re-identification risk (quasi-identifiers)
+        # ----------------------------------------------------------
+        quasi_patterns = (
+            "zip.code\\|postal.code\\|birth.date\\|date.of.birth\\|dob"
+            "\\|gender\\|age\\|ethnicity\\|nationality"
+        )
+        quasi_refs = await self._grep_container(quasi_patterns)
+
+        # Check if multiple quasi-identifiers appear together
+        qi_files = [f.strip() for f in quasi_refs.splitlines() if f.strip()] if quasi_refs else []
+        # A file containing multiple quasi-identifiers is a higher risk
+        multi_qi = len(qi_files) >= 2
+
+        if quasi_refs and has_pii:
+            self.add_finding(
+                title="Re-identification risk: quasi-identifiers detected alongside PII",
+                description=(
+                    "The container references quasi-identifiers (e.g., zip code, "
+                    "birth date, gender) in combination with PII. Research by "
+                    "Latanya Sweeney demonstrated that 87% of the US population "
+                    "can be uniquely identified using only zip code, birth date, "
+                    "and gender. The presence of multiple quasi-identifiers "
+                    "significantly increases the risk of re-identification even "
+                    "when direct identifiers are removed."
+                ),
+                severity=Severity.HIGH if multi_qi else Severity.MEDIUM,
+                owasp_llm=["LLM02"],
+                nist_ai_rmf=["MAP", "MEASURE"],
+                evidence=[
+                    Evidence(
+                        type="code",
+                        summary=(
+                            f"Quasi-identifier references found in {len(qi_files)} file(s)"
+                        ),
+                        raw_data=(
+                            f"Searched patterns: {quasi_patterns}\n"
+                            f"Matching files:\n{quasi_refs[:800]}"
+                        ),
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Apply generalization or suppression to quasi-identifiers "
+                    "before processing. For example, generalize zip codes to "
+                    "the first 3 digits, replace exact birth dates with age "
+                    "ranges, and aggregate gender into broader categories. "
+                    "Implement k-anonymity (k >= 5) or l-diversity to ensure "
+                    "that no individual can be singled out from the dataset."
+                ),
+                references=[
+                    "https://dataprivacylab.org/projects/identifiability/",
+                    "https://en.wikipedia.org/wiki/Quasi-identifier",
+                    "https://doi.org/10.1142/S0218488502001648",
+                ],
+                cvss_score=5.5,
+                ai_risk_score=7.5,
+            )
+
+        # ----------------------------------------------------------
+        # 3. k-Anonymity assessment
+        # ----------------------------------------------------------
+        kanon_refs = await self._grep_container(
+            "k.anonymity\\|l.diversity\\|t.closeness\\|kanonymity\\|KAnonymity"
+        )
+
+        if not kanon_refs and has_pii:
+            self.add_finding(
+                title="No k-anonymity or equivalent privacy model implemented",
+                description=(
+                    "The container processes PII but does not implement "
+                    "k-anonymity, l-diversity, t-closeness, or any equivalent "
+                    "formal privacy model. Without such models, released or "
+                    "processed datasets may allow statistical re-identification "
+                    "of individuals. k-anonymity ensures that each combination "
+                    "of quasi-identifiers maps to at least k records, making "
+                    "it harder to single out individuals."
+                ),
+                severity=Severity.MEDIUM,
+                owasp_llm=["LLM02"],
+                nist_ai_rmf=["MAP", "MEASURE", "MANAGE"],
+                evidence=[
+                    Evidence(
+                        type="code",
+                        summary="No k-anonymity / l-diversity / t-closeness patterns found",
+                        raw_data=(
+                            "Searched for: k.anonymity, l.diversity, t.closeness, "
+                            "kanonymity, KAnonymity\n"
+                            "Matching files: none"
+                        ),
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Implement a formal privacy model before releasing or "
+                    "processing datasets containing personal information. "
+                    "Use libraries such as ARX Data Anonymization Tool, "
+                    "Google's differential-privacy library, or the Python "
+                    "'anonymeter' package. Target at least k=5 for "
+                    "k-anonymity and complement with l-diversity to protect "
+                    "against attribute-disclosure attacks."
+                ),
+                references=[
+                    "https://arx.deidentifier.org/",
+                    "https://github.com/google/differential-privacy",
+                    "https://doi.org/10.1007/s10207-006-0032-z",
+                ],
+                cvss_score=4.5,
+                ai_risk_score=6.5,
+            )
+
+        # ----------------------------------------------------------
+        # 4. Data masking in logs
+        # ----------------------------------------------------------
+        pii_log_patterns = (
+            "email\\|password\\|ssn\\|social.security\\|credit.card"
+            "\\|phone.number\\|address"
+        )
+        log_paths = [
+            "/var/log",
+            "/app/logs",
+            "/app/log",
+            "/tmp/*.log",
+            "/opt/app/logs",
+        ]
+        log_dirs_found = await self._probe_file_exists(*log_paths)
+
+        # If log directories exist, search for PII patterns inside them
+        pii_in_logs = ""
+        if log_dirs_found:
+            cid = self.context.container_id
+            if cid:
+                try:
+                    dirs_str = " ".join(log_dirs_found)
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker", "exec", cid,
+                        "sh", "-c",
+                        f"grep -r -i -l '{pii_log_patterns}' {dirs_str} 2>/dev/null | head -10",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, _ = await proc.communicate()
+                    pii_in_logs = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+                except Exception:
+                    pii_in_logs = ""
+
+        if pii_in_logs:
+            self.add_finding(
+                title="PII patterns detected in log files -- data masking absent",
+                description=(
+                    "Log files inside the container contain patterns that match "
+                    "common PII fields (email, password, SSN, credit card, "
+                    "phone number, address). Logs are frequently collected by "
+                    "centralized logging systems and may be accessible to "
+                    "operations staff who should not have access to personal "
+                    "data. GDPR Art. 25 and CCPA Sec. 1798.150 require "
+                    "appropriate technical measures to protect personal data."
+                ),
+                severity=Severity.HIGH,
+                owasp_llm=["LLM02"],
+                nist_ai_rmf=["GOVERN", "MANAGE"],
+                evidence=[
+                    Evidence(
+                        type="file",
+                        summary="Log files containing PII patterns",
+                        raw_data=(
+                            f"Log directories checked: {', '.join(log_dirs_found)}\n"
+                            f"Files with PII patterns:\n{pii_in_logs[:800]}"
+                        ),
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Implement structured logging with automatic PII redaction. "
+                    "Use a log formatter that masks sensitive fields before "
+                    "writing to disk or forwarding to a log aggregator. "
+                    "Libraries such as 'loguru' (with custom sinks) or custom "
+                    "Python logging.Filter subclasses can redact PII patterns. "
+                    "Never log raw request/response bodies that may contain "
+                    "personal data."
+                ),
+                references=[
+                    "https://owasp.org/www-project-logging-cheat-sheet/",
+                    "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+                ],
+                cvss_score=6.0,
+                ai_risk_score=7.5,
+            )
+
+        # ----------------------------------------------------------
+        # 5. PII in caches and temporary files
+        # ----------------------------------------------------------
+        temp_paths = [
+            "/tmp",
+            "/var/tmp",
+            "/var/cache",
+            "/dev/shm",
+            "/app/.cache",
+            "/root/.cache",
+        ]
+        temp_dirs_found = await self._probe_file_exists(*temp_paths)
+
+        pii_in_temp = ""
+        if temp_dirs_found:
+            cid = self.context.container_id
+            if cid:
+                try:
+                    dirs_str = " ".join(temp_dirs_found)
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker", "exec", cid,
+                        "sh", "-c",
+                        (
+                            f"find {dirs_str} -type f -size +0 2>/dev/null | head -20 | "
+                            f"xargs grep -l -i '{pii_log_patterns}' 2>/dev/null | head -10"
+                        ),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, _ = await proc.communicate()
+                    pii_in_temp = stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+                except Exception:
+                    pii_in_temp = ""
+
+        if pii_in_temp:
+            self.add_finding(
+                title="PII detected in temporary files or caches",
+                description=(
+                    "Temporary directories or caches inside the container hold "
+                    "files that match PII patterns. Temporary files are often "
+                    "world-readable, survive container restarts when volumes "
+                    "are mounted, and may be included in container image layers "
+                    "if the Dockerfile does not clean them up. This creates an "
+                    "uncontrolled copy of personal data outside the primary "
+                    "data store."
+                ),
+                severity=Severity.MEDIUM,
+                owasp_llm=["LLM02"],
+                nist_ai_rmf=["GOVERN", "MANAGE"],
+                evidence=[
+                    Evidence(
+                        type="file",
+                        summary="Temp/cache files containing PII patterns",
+                        raw_data=(
+                            f"Temp directories checked: {', '.join(temp_dirs_found)}\n"
+                            f"Files with PII patterns:\n{pii_in_temp[:800]}"
+                        ),
+                        location=f"container:{self.context.container_id}",
+                    )
+                ],
+                remediation=(
+                    "Avoid writing PII to temporary files. If temporary storage "
+                    "is required, use in-memory buffers (io.BytesIO) or encrypt "
+                    "temp files and delete them immediately after use. Set "
+                    "restrictive permissions (0600) on any temp files. Add a "
+                    "Dockerfile RUN step to clean /tmp and /var/cache before "
+                    "the final image layer. Mount tmpfs for /tmp in production "
+                    "to ensure data does not persist across container restarts."
+                ),
+                references=[
+                    "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html",
+                    "https://docs.docker.com/storage/tmpfs/",
+                ],
+                cvss_score=5.0,
+                ai_risk_score=6.5,
+            )
+
+        # Store anonymization check metadata
+        self.context.metadata.setdefault("compliance_checks", {})["anonymization"] = {
+            "has_anonymization_impl": bool(anon_refs),
+            "quasi_identifiers_found": bool(quasi_refs),
+            "quasi_identifier_files": qi_files[:5],
+            "has_k_anonymity": bool(kanon_refs),
+            "pii_in_logs": bool(pii_in_logs),
+            "log_dirs_checked": log_dirs_found,
+            "pii_in_temp": bool(pii_in_temp),
+            "temp_dirs_checked": temp_dirs_found,
+        }
 
     # ------------------------------------------------------------------
     # GDPR checks

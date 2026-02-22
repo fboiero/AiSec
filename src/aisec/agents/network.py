@@ -37,7 +37,8 @@ class NetworkAgent(BaseAgent):
     name: ClassVar[str] = "network"
     description: ClassVar[str] = (
         "Analyses exposed ports, WebSocket endpoints, TLS configuration, "
-        "and outbound network connections on the target container."
+        "outbound network connections, model extraction defenses, "
+        "and model API security on the target container."
     )
     phase: ClassVar[AgentPhase] = AgentPhase.DYNAMIC
     frameworks: ClassVar[list[str]] = ["LLM09", "ASI07", "ASI08"]
@@ -54,6 +55,8 @@ class NetworkAgent(BaseAgent):
         await self._check_websocket_endpoints(container_info)
         await self._check_tls_configuration(container_info)
         await self._check_outbound_connections()
+        await self._check_model_extraction_defenses(container_info)
+        await self._check_model_api_security(container_info)
 
     # ------------------------------------------------------------------
     # Container introspection helpers
@@ -403,3 +406,272 @@ class NetworkAgent(BaseAgent):
             cvss_score=5.3,
             ai_risk_score=6.0,
         )
+
+    # ------------------------------------------------------------------
+    # Source code grep helper
+    # ------------------------------------------------------------------
+
+    async def _grep_source(self, pattern: str) -> str:
+        """Run a case-insensitive grep inside the container and return matches.
+
+        Searches common application directories (/app, /src, /opt) for the
+        given regex *pattern*.  Returns the raw ``grep`` output (file paths
+        and matching lines) or an empty string when nothing is found or the
+        container is unavailable.
+        """
+        cid = self.context.container_id
+        if not cid:
+            return ""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "exec", cid,
+                "sh", "-c",
+                f"grep -r -i -l '{pattern}' /app /src /opt 2>/dev/null | head -20",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            return stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    # ------------------------------------------------------------------
+    # Model Theft & Extraction Detection (M3.5)
+    # ------------------------------------------------------------------
+
+    async def _check_model_extraction_defenses(self, info: dict[str, Any]) -> None:
+        """Check for defenses against model theft and extraction attacks.
+
+        Verifies the presence of rate limiting on inference endpoints,
+        query logging/monitoring, and output perturbation techniques
+        that make model extraction attacks harder to execute.
+        """
+        cid = self.context.container_id
+        if not cid:
+            return
+
+        # --- Rate limiting on model inference endpoints ---
+        rate_limit_hits = await self._grep_source(
+            r"RateLimit\|rate_limit\|ratelimit\|throttle\|slowapi\|"
+            r"token_bucket\|sliding_window"
+        )
+        if not rate_limit_hits:
+            self.add_finding(
+                title="No rate limiting detected on model inference endpoints",
+                description=(
+                    "No rate limiting mechanisms were found in the application "
+                    "source code. Without rate limiting, an attacker can issue "
+                    "a large number of queries to systematically extract or "
+                    "replicate the model through prediction APIs. Model "
+                    "extraction attacks typically require thousands of queries "
+                    "that would be blocked by proper rate limits."
+                ),
+                severity=Severity.HIGH,
+                owasp_llm=["LLM09"],
+                owasp_agentic=["ASI07", "ASI08"],
+                evidence=[
+                    Evidence(
+                        type="config",
+                        summary="No rate limiting patterns found in source",
+                        raw_data="Searched for: RateLimit, rate_limit, ratelimit, "
+                                 "throttle, slowapi, token_bucket, sliding_window",
+                        location=f"container:{cid}",
+                    )
+                ],
+                remediation=(
+                    "Implement rate limiting on all model inference and prediction "
+                    "endpoints. Use libraries such as SlowAPI (FastAPI), "
+                    "flask-limiter, or a reverse proxy rate limiter (nginx, "
+                    "Envoy). Set per-user and per-IP limits appropriate for "
+                    "legitimate usage patterns."
+                ),
+                references=[
+                    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                    "https://arxiv.org/abs/1609.02943",
+                ],
+                cvss_score=7.5,
+                ai_risk_score=8.0,
+            )
+
+        # --- Query logging / monitoring ---
+        query_log_hits = await self._grep_source(
+            r"inference_log\|prediction_log\|access_log\|audit_trail\|"
+            r"request_counter\|usage_tracking\|query_monitor"
+        )
+        if not query_log_hits:
+            self.add_finding(
+                title="No inference query logging or monitoring detected",
+                description=(
+                    "No query logging or monitoring mechanisms were found for "
+                    "model inference endpoints. Without logging, anomalous "
+                    "query patterns indicative of model extraction attempts "
+                    "(e.g., systematic exploration of the decision boundary) "
+                    "will go undetected."
+                ),
+                severity=Severity.MEDIUM,
+                owasp_llm=["LLM09"],
+                owasp_agentic=["ASI07", "ASI08"],
+                evidence=[
+                    Evidence(
+                        type="config",
+                        summary="No inference logging patterns found in source",
+                        raw_data="Searched for: inference_log, prediction_log, "
+                                 "access_log, audit_trail, request_counter, "
+                                 "usage_tracking, query_monitor",
+                        location=f"container:{cid}",
+                    )
+                ],
+                remediation=(
+                    "Add structured logging for all inference requests including "
+                    "timestamps, user identity, input features, and response "
+                    "metadata. Implement anomaly detection on query patterns to "
+                    "identify potential extraction campaigns. Consider using an "
+                    "audit trail system for compliance."
+                ),
+                references=[
+                    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                ],
+                cvss_score=5.3,
+                ai_risk_score=6.0,
+            )
+
+        # --- Output perturbation / watermarking ---
+        perturbation_hits = await self._grep_source(
+            r"add_noise\|laplace_noise\|gaussian_noise\|output_perturbation\|"
+            r"prediction_watermark\|differential_privacy\|dp_noise\|watermark"
+        )
+        if not perturbation_hits:
+            self.add_finding(
+                title="No output perturbation or watermarking detected",
+                description=(
+                    "No output perturbation or model watermarking techniques "
+                    "were found. Adding calibrated noise to prediction outputs "
+                    "or embedding watermarks can degrade the quality of "
+                    "extracted model copies and help prove ownership of stolen "
+                    "models. This is an advisory finding."
+                ),
+                severity=Severity.INFO,
+                owasp_llm=["LLM09"],
+                owasp_agentic=["ASI07"],
+                evidence=[
+                    Evidence(
+                        type="config",
+                        summary="No output perturbation patterns found in source",
+                        raw_data="Searched for: add_noise, laplace_noise, "
+                                 "gaussian_noise, output_perturbation, "
+                                 "prediction_watermark, differential_privacy, "
+                                 "dp_noise, watermark",
+                        location=f"container:{cid}",
+                    )
+                ],
+                remediation=(
+                    "Consider adding output perturbation (e.g., Laplace or "
+                    "Gaussian noise calibrated to preserve utility) to model "
+                    "predictions. Implement model watermarking to enable "
+                    "detection of stolen model copies. Libraries such as "
+                    "IBM ART or ML-Privacy-Meter can help."
+                ),
+                references=[
+                    "https://arxiv.org/abs/1906.00830",
+                    "https://arxiv.org/abs/1609.02943",
+                ],
+                cvss_score=2.0,
+                ai_risk_score=3.0,
+            )
+
+    async def _check_model_api_security(self, info: dict[str, Any]) -> None:
+        """Check model API endpoints for authentication and access control.
+
+        Verifies that inference/prediction endpoints require authentication
+        and that model versioning with access control is in place to prevent
+        unauthorized access to model assets.
+        """
+        cid = self.context.container_id
+        if not cid:
+            return
+
+        # --- API authentication on model endpoints ---
+        auth_hits = await self._grep_source(
+            r"api_key\|bearer_token\|jwt\|oauth\|authenticate\|"
+            r"authorization\|auth_middleware\|requires_auth\|login_required"
+        )
+        if not auth_hits:
+            self.add_finding(
+                title="No API authentication detected on model endpoints",
+                description=(
+                    "No authentication mechanisms (API keys, JWT, OAuth, or "
+                    "auth middleware) were found in the application source "
+                    "code. Unauthenticated model endpoints allow any network "
+                    "user to query the model freely, enabling model extraction, "
+                    "abuse, and unauthorized use of compute resources."
+                ),
+                severity=Severity.HIGH,
+                owasp_llm=["LLM09"],
+                owasp_agentic=["ASI07", "ASI08"],
+                evidence=[
+                    Evidence(
+                        type="config",
+                        summary="No authentication patterns found in source",
+                        raw_data="Searched for: api_key, bearer_token, jwt, oauth, "
+                                 "authenticate, authorization, auth_middleware, "
+                                 "requires_auth, login_required",
+                        location=f"container:{cid}",
+                    )
+                ],
+                remediation=(
+                    "Implement authentication on all model inference endpoints. "
+                    "Use API keys, JWT tokens, or OAuth 2.0 depending on the "
+                    "deployment context. Ensure that authentication is enforced "
+                    "at the middleware level so it cannot be bypassed. Rotate "
+                    "credentials regularly and implement key scoping."
+                ),
+                references=[
+                    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                    "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+                ],
+                cvss_score=8.2,
+                ai_risk_score=8.5,
+            )
+
+        # --- Model versioning and access control ---
+        versioning_hits = await self._grep_source(
+            r"model_registry\|model_version\|model_access\|access_control\|"
+            r"model_catalog\|model_metadata\|model_permission\|rbac"
+        )
+        if not versioning_hits:
+            self.add_finding(
+                title="No model versioning or access control detected",
+                description=(
+                    "No model versioning, registry, or access control patterns "
+                    "were found in the source code. Without proper model "
+                    "versioning and access control, it is difficult to track "
+                    "which model versions are deployed, who has access to them, "
+                    "and whether deprecated or vulnerable models are still "
+                    "being served."
+                ),
+                severity=Severity.MEDIUM,
+                owasp_llm=["LLM09"],
+                owasp_agentic=["ASI07", "ASI08"],
+                evidence=[
+                    Evidence(
+                        type="config",
+                        summary="No model versioning/access control patterns found",
+                        raw_data="Searched for: model_registry, model_version, "
+                                 "model_access, access_control, model_catalog, "
+                                 "model_metadata, model_permission, rbac",
+                        location=f"container:{cid}",
+                    )
+                ],
+                remediation=(
+                    "Implement a model registry (e.g., MLflow, DVC, or a custom "
+                    "registry) with versioning and role-based access control "
+                    "(RBAC). Track model lineage, restrict who can deploy or "
+                    "update models, and ensure deprecated models are properly "
+                    "retired. Maintain an audit log of model access."
+                ),
+                references=[
+                    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                ],
+                cvss_score=5.0,
+                ai_risk_score=5.5,
+            )

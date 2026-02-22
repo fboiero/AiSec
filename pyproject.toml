@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aisec"
-version = "1.0.0"
+version = "1.1.0"
 description = "Deep security analysis framework for autonomous AI agent implementations"
 readme = "README.md"
 license = "Apache-2.0"

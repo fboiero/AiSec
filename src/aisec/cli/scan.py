@@ -349,7 +349,7 @@ async def _run_scan_with_dashboard(
 
 @scan_app.command(name="run")
 def scan(
-    image: str = typer.Argument(..., help="Docker image or target to scan."),
+    image: str = typer.Argument(..., help="Docker image(s) to scan. Comma-separated for multi-target."),
     agents: Optional[str] = typer.Option(  # noqa: UP007
         None,
         "--agents",
@@ -436,35 +436,52 @@ def scan(
         _logging.basicConfig(level=_logging.DEBUG, format="%(name)s %(message)s")
         console.print(Panel(str(cfg), title="Resolved configuration", style="dim"))
 
-    # ── Execute scan ────────────────────────────────────────────────
-    # Use dashboard mode only when explicitly enabled AND in an interactive
-    # terminal (stdout connected to a TTY).
+    # ── Multi-target support ────────────────────────────────────────
+    images = [img.strip() for img in image.split(",") if img.strip()]
+
     use_dashboard = dashboard and sys.stdout.isatty()
 
-    if use_dashboard:
-        ctx = asyncio.run(_run_scan_with_dashboard(image, cfg, verbose))
-    else:
-        ctx = asyncio.run(_run_scan(image, cfg, verbose))
+    for idx, target_image in enumerate(images):
+        if len(images) > 1:
+            console.print(
+                f"\n[bold cyan]── Target {idx + 1}/{len(images)}: {target_image} ──[/bold cyan]"
+            )
+            # Override target image in config for each target
+            target_cfg = AiSecConfig(
+                **{
+                    **{k: getattr(cfg, k) for k in cfg.model_fields},
+                    "target_image": target_image,
+                }
+            )
+        else:
+            target_cfg = cfg
 
-    # ── Display results ─────────────────────────────────────────────
-    if ctx.agent_results:
-        console.print(_build_results_table(ctx))
+        if use_dashboard:
+            ctx = asyncio.run(_run_scan_with_dashboard(target_image, target_cfg, verbose))
+        else:
+            ctx = asyncio.run(_run_scan(target_image, target_cfg, verbose))
 
-        # Summary stats
-        total_findings = sum(len(r.findings) for r in ctx.agent_results.values())
-        console.print(
-            f"\n[info]Total findings: [bold]{total_findings}[/bold] "
-            f"across {len(ctx.agent_results)} agents[/info]"
-        )
-    else:
-        console.print(
-            Panel("[warning]No agent results produced.[/warning]", title="Results")
-        )
+        # ── Display results ─────────────────────────────────────────
+        if ctx.agent_results:
+            console.print(_build_results_table(ctx))
 
-    # ── Report paths ─────────────────────────────────────────────────
-    rendered = ctx.metadata.get("rendered_files", [])
-    if rendered:
-        console.print("\n[success]Reports written to:[/success]")
-        for path in rendered:
-            console.print(f"  {path}")
-    console.print()
+            total_findings = sum(len(r.findings) for r in ctx.agent_results.values())
+            console.print(
+                f"\n[info]Total findings: [bold]{total_findings}[/bold] "
+                f"across {len(ctx.agent_results)} agents[/info]"
+            )
+        else:
+            console.print(
+                Panel("[warning]No agent results produced.[/warning]", title="Results")
+            )
+
+        # ── Report paths ─────────────────────────────────────────────
+        rendered = ctx.metadata.get("rendered_files", [])
+        if rendered:
+            console.print("\n[success]Reports written to:[/success]")
+            for path in rendered:
+                console.print(f"  {path}")
+        console.print()
+
+    if len(images) > 1:
+        console.print(f"[bold green]All {len(images)} targets scanned.[/bold green]")
