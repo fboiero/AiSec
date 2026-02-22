@@ -5,6 +5,46 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-22
+
+### Added
+- **TaintAnalysisAgent** (21st agent) -- AST-based source-to-sink taint tracking of untrusted data (LLM outputs, user input, tool results) flowing to dangerous functions (eval, exec, SQL, subprocess) without sanitization.
+- **SerializationAgent** (22nd agent) -- Deep deserialization attack surface scanning across pickle, YAML, XML (XXE), JSON (jsonpickle), protobuf, msgpack, and model file formats with __reduce__ override detection.
+- **GitHistorySecretsAgent** (23rd agent) -- Git commit history secret scanning via gitleaks integration with built-in regex fallback for API keys, private keys, connection strings, JWTs, and high-entropy strings.
+- **DeepDependencyAgent** (24th agent) -- Transitive dependency analysis via pipdeptree, license compliance checking via pip-licenses, dependency confusion risk detection, and abandoned package flagging.
+- **ResourceExhaustionAgent** (25th agent) -- ReDoS detection via catastrophic backtracking analysis, zip bomb detection, unbounded loop detection, missing HTTP timeouts, memory allocation bombs, and recursive function depth limits.
+- **InterServiceSecurityAgent** (26th agent) -- Webhook HMAC verification checks, mTLS absence detection, message queue authentication (RabbitMQ, Kafka, Redis), gRPC reflection detection, callback URL validation, and Kubernetes NetworkPolicy checks.
+- **DataLineagePrivacyAgent** (27th agent) -- PII flow tracking to LLM APIs, consent mechanism verification, right-to-erasure implementation checks, PII in logs detection, training data privacy, and audit trail verification with GDPR/CCPA mapping.
+- **EmbeddingLeakageAgent** (28th agent) -- Vector DB authentication checks (ChromaDB, Pinecone, Weaviate, Milvus, Qdrant, FAISS), multi-tenant namespace isolation, training data memorization risks, embedding cache integrity, and embedding API exposure.
+- **Shared taint engine** (`utils/taint.py`) -- Reusable AST-based taint propagation engine with configurable sources, sinks, and flow tracking used by TaintAnalysis and other agents.
+- **10 new correlation rules** (18 total) -- Cross-agent compound risk detection: taint flow + eval = code injection, unsafe deserialization + open ports = RCE, git secrets + active credentials, transitive vulns + no SBOM, ReDoS + public API, no mTLS + PII flow, PII to LLM + no consent, embeddings + no auth, pickle + unpinned deps = model poisoning, webhook no HMAC + open port.
+
+### Changed
+- Agent count increased from 20 to 28.
+- Correlation rules increased from 8 to 18.
+- `pyproject.toml` extended with `deptree` optional dependency group (pipdeptree, pip-licenses).
+- `all` extras group updated to include `deptree`.
+- Version bumped to 1.4.0.
+
+## [1.3.0] - 2026-02-22
+
+### Added
+- **StaticAnalysisAgent** (16th agent) -- Semgrep + Bandit static code security analysis with built-in pattern fallback for eval/exec on LLM output, subprocess shell injection, pickle deserialization, hardcoded API keys, unsafe YAML loading, and prompt template injection.
+- **DependencyAuditAgent** (17th agent) -- pip-audit integration for CVE-level vulnerability detection, typosquatting detection against popular AI/ML packages (Levenshtein distance), known malicious package blocklist (~50 packages), and dependency pinning analysis.
+- **APISecurityAgent** (18th agent) -- Nuclei-based endpoint scanning with custom AI templates, authentication bypass detection, rate limiting verification, CORS policy analysis, information disclosure checks, GraphQL introspection detection, and verbose error analysis.
+- **IaCSecurityAgent** (19th agent) -- Checkov integration for Dockerfile/K8s manifest scanning with built-in checks for root user, :latest tags, secrets in ENV/ARG, missing HEALTHCHECK, sensitive port exposure, privileged containers, hostNetwork, missing resource limits, and missing securityContext.
+- **RuntimeBehaviorAgent** (20th agent) -- Container runtime behavior monitoring including suspicious process detection (miners, reverse shells), sensitive filesystem modification tracking, external network connection analysis, resource usage anomaly detection, and root process enumeration.
+- **Cross-agent correlation engine** (`core/correlation.py`) -- Identifies compound risks by cross-referencing findings from multiple agents (e.g., "hardcoded credential + open port = critical data leak"). 8 built-in correlation rules covering data leaks, prompt injection, container escape, unbounded consumption, unverifiable dependencies, blind exploitation, remote exploitation, and infrastructure compromise.
+- **Custom AI security Semgrep rules** (`rules/ai_security.yaml`) -- 10 rules targeting AI anti-patterns: eval/exec on LLM output, unvalidated tool results, prompt template injection, unsafe pickle/torch model loading, missing rate limits on inference endpoints, hardcoded API keys (OpenAI, Anthropic, HuggingFace), and unsafe YAML loading.
+- **Custom Nuclei templates** (`rules/nuclei/`) -- 4 templates for AI API security: unauthenticated inference endpoints, exposed debug/docs endpoints, model enumeration without auth, and publicly accessible metrics.
+- `correlated_risks` field added to `ScanReport` model and rendered in JSON, HTML, and fallback template outputs.
+
+### Changed
+- Agent count increased from 15 to 20.
+- `pyproject.toml` extended with `static`, `audit`, `iac`, and `nuclei` optional dependency groups.
+- `all` extras group updated to include new dependency groups.
+- Version bumped to 1.3.0.
+
 ## [1.2.0] - 2026-02-22
 
 ### Added
@@ -105,6 +145,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI interface: `aisec scan`, `aisec report`, `aisec config`, `aisec plugins`.
 - Apache 2.0 license.
 
+[1.4.0]: https://github.com/fboiero/AiSec/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/fboiero/AiSec/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/fboiero/AiSec/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fboiero/AiSec/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fboiero/AiSec/compare/v0.4.0...v1.0.0

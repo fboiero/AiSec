@@ -1,0 +1,40 @@
+id: ai-api-unauth
+
+info:
+  name: Unauthenticated AI Inference Endpoint
+  author: aisec
+  severity: high
+  description: |
+    Detects AI inference endpoints accessible without authentication.
+    Unauthenticated access allows anyone to use the model, potentially
+    causing cost overruns, data leakage, or resource exhaustion.
+  tags: ai,auth,misconfig
+  metadata:
+    owasp: LLM10
+    category: security
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/v1/chat/completions"
+      - "{{BaseURL}}/v1/completions"
+      - "{{BaseURL}}/v1/embeddings"
+      - "{{BaseURL}}/api/generate"
+      - "{{BaseURL}}/api/chat"
+    headers:
+      Content-Type: application/json
+    body: '{"model":"test","messages":[{"role":"user","content":"hello"}]}'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "choices"
+          - "response"
+          - "message"
+          - "content"
+        condition: or

@@ -26,10 +26,10 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 
 ### Key Features
 
-- **15 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
+- **28 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
 - **Docker-Based Sandboxing** - Target AI agents run in isolated Docker environments with full network and filesystem instrumentation
 - **8 Compliance Frameworks** - GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST AI 600-1, NIST AI RMF, Argentina AI Bill
-- **100+ Risk Detectors** - Covering prompt injection, cryptographic weaknesses, supply chain, adversarial robustness, deepfakes, and more
+- **200+ Risk Detectors** - Covering prompt injection, taint analysis, cryptographic weaknesses, supply chain, serialization, resource exhaustion, data lineage, and more
 - **AI-CVSS Scoring** - Extended CVSS scoring with AI-specific risk dimensions (autonomy impact, cascade potential, persistence risk)
 - **4 Report Formats** - JSON, HTML, PDF, and SARIF for IDE/CI integration (GitHub Code Scanning, VS Code)
 - **REST API** - `aisec serve` with Django REST Framework for programmatic access
@@ -41,44 +41,44 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 ## Architecture
 
 ```
-                         +------------------+
-                         |    AiSec CLI     |
-                         |  scan | serve    |
-                         +--------+---------+
-                                  |
-                         +--------v---------+
-                         |   Orchestrator   |
-                         |   Agent (DAG)    |
-                         +--------+---------+
-                                  |
-    +----------+----------+-------+-------+----------+----------+
-    |          |          |       |       |          |          |
-+---v----+ +--v-----+ +--v--+ +-v----+ +-v------+ +v-------+ +v------+
-|Network | |DataFlow| |Priv.| |Prompt| |Supply  | |Permis. | |Output |
-|Agent   | |Agent   | |Agent| |Sec.  | |Chain   | |Agent   | |Agent  |
-+--------+ +--------+ +-----+ +------+ +--------+ +--------+ +-------+
-    |          |          |       |       |          |          |
-+---v----+ +--v-----+ +--v--+ +-v----+ +-v------+ +v-------+ +v------+
-|Crypto  | |SBOM    | |Garak| |Guard.| |Model   | |Advers. | |Cascade|
-|Agent   | |Agent   | |Agent| |Agent | |Scan    | |Agent   | |Agent  |
-+--------+ +--------+ +-----+ +------+ +--------+ +--------+ +-------+
-                                                                  |
-                                                          +-------v--------+
-                                                          |  Synthetic     |
-                                                          |  Content Agent |
-                                                          +----------------+
-                          |
-                +---------v-----------+
-                |   Docker Sandbox    |
-                |  +---------------+  |
-                |  | Target Agent  |  |
-                |  +---------------+  |
-                +---------------------+
-                          |
-                +---------v-----------+
-                |   Report Builder    |
-                | JSON|HTML|PDF|SARIF |
-                +---------------------+
+                          +------------------+
+                          |    AiSec CLI     |
+                          |  scan | serve    |
+                          +--------+---------+
+                                   |
+                          +--------v---------+
+                          |   Orchestrator   |
+                          |   Agent (DAG)    |
+                          +--------+---------+
+                                   |
+  ┌─────────────────── Layer 1: Core Security ────────────────────┐
+  │  Network   DataFlow   Privacy   Prompt    Supply   Permission │
+  │  Output    Crypto     SBOM      Garak     Guard    ModelScan  │
+  │  Adversarial   Cascade   SyntheticContent                     │
+  └───────────────────────────────────────────────────────────────┘
+                                   |
+  ┌──────────────── Layer 2: Code & Infra Analysis ───────────────┐
+  │  StaticAnalysis   DependencyAudit   APISecurity   IaCSecurity │
+  │  RuntimeBehavior                                              │
+  └───────────────────────────────────────────────────────────────┘
+                                   |
+  ┌──────────── Layer 3: Deep Code & Privacy (v1.4) ──────────────┐
+  │  TaintAnalysis   Serialization   GitHistorySecrets            │
+  │  DeepDependency  ResourceExhaustion  InterService             │
+  │  DataLineage     EmbeddingLeakage                             │
+  └───────────────────────────────────────────────────────────────┘
+                                   |
+                          +--------v---------+
+                          |  Docker Sandbox   |
+                          | +---------------+ |
+                          | | Target Agent  | |
+                          | +---------------+ |
+                          +-------------------+
+                                   |
+                          +--------v---------+
+                          |  Report Builder   |
+                          | JSON|HTML|PDF|SARIF|
+                          +-------------------+
 ```
 
 ## Security Analysis Agents
@@ -100,6 +100,19 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 | **AdversarialAgent** | Evasion attacks, encoding bypass, multi-turn manipulation, fuzzing | LLM01, ASI01 |
 | **CascadeAgent** | Multi-agent dependency graphs, cascade failure, inter-agent auth, trust boundaries | ASI07, ASI08 |
 | **SyntheticContentAgent** | Deepfake detection, voice cloning, C2PA provenance, watermarking | LLM09, ASI09 |
+| **StaticAnalysisAgent** | Semgrep + Bandit integration, AI-specific code patterns, dangerous constructs | LLM01, LLM07 |
+| **DependencyAuditAgent** | pip-audit CVEs, typosquatting detection, malicious package flagging | LLM03, ASI04 |
+| **APISecurityAgent** | Auth bypass, rate limiting, CORS, info disclosure, GraphQL introspection | LLM09, ASI07 |
+| **IaCSecurityAgent** | Dockerfiles, K8s manifests, Helm charts, Checkov integration | ASI04, ASI05 |
+| **RuntimeBehaviorAgent** | Process monitoring, filesystem changes, network activity, anomaly detection | ASI07, ASI08 |
+| **TaintAnalysisAgent** | AST-based source-to-sink tracking, LLM output to eval/exec/SQL flows | LLM01, LLM07, ASI01 |
+| **SerializationAgent** | Pickle, YAML, XML (XXE), jsonpickle, protobuf, msgpack deserialization | LLM03, ASI04 |
+| **GitHistorySecretsAgent** | Git history secret scanning, gitleaks integration, historical vs current leaks | LLM02, ASI06 |
+| **DeepDependencyAgent** | Transitive deps, license compliance, abandoned packages, dependency confusion | LLM03, ASI04, ASI05 |
+| **ResourceExhaustionAgent** | ReDoS, zip bombs, unbounded loops, missing timeouts, memory bombs | LLM10, ASI08 |
+| **InterServiceAgent** | Webhook HMAC, mTLS, message queue auth, gRPC reflection, callback validation | ASI07, ASI08 |
+| **DataLineageAgent** | PII-to-LLM tracking, consent verification, right-to-erasure, GDPR/CCPA mapping | LLM02, ASI06 |
+| **EmbeddingLeakageAgent** | Vector DB auth, namespace isolation, memorization risks, embedding inversion | LLM02, LLM04, ASI06 |
 
 ## Quick Start
 
@@ -117,6 +130,9 @@ pip install aisec
 
 # Install with all optional dependencies
 pip install "aisec[all]"
+
+# Install with deep dependency analysis (pipdeptree, pip-licenses)
+pip install "aisec[deptree]"
 
 # Install with REST API server
 pip install "aisec[api]"
@@ -314,7 +330,7 @@ mypy src/aisec/
 
 - [x] Core agent framework and orchestrator
 - [x] Docker sandbox with network/filesystem instrumentation
-- [x] 15 specialized security analysis agents
+- [x] 28 specialized security analysis agents
 - [x] OWASP LLM Top 10 + Agentic Top 10 mapping
 - [x] NIST AI RMF + NIST AI 600-1 assessment
 - [x] 8 compliance frameworks (GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST 600-1, Argentina AI)
@@ -326,6 +342,11 @@ mypy src/aisec/
 - [x] Multi-agent cascade analysis
 - [x] Synthetic content / deepfake detection
 - [x] Scan history and trending (SQLite)
+- [x] Static analysis (Semgrep + Bandit), dependency audit, API security, IaC scanning
+- [x] AST-based taint analysis, serialization attack surface, git history secrets
+- [x] Deep dependency analysis, resource exhaustion detection, inter-service security
+- [x] Data lineage privacy tracking, embedding leakage detection
+- [x] 18 cross-agent correlation rules
 - [ ] Cloud deployment (AWS, GCP, Azure)
 - [ ] Real-time runtime monitoring (Falco integration)
 - [ ] Web UI dashboard

@@ -83,6 +83,19 @@ def register_core_agents() -> None:
     from aisec.agents.adversarial import AdversarialAgent
     from aisec.agents.cascade import CascadeAgent
     from aisec.agents.synthetic_content import SyntheticContentAgent
+    from aisec.agents.static_analysis import StaticAnalysisAgent
+    from aisec.agents.dependency_audit import DependencyAuditAgent
+    from aisec.agents.api_security import APISecurityAgent
+    from aisec.agents.iac_security import IaCSecurityAgent
+    from aisec.agents.runtime_behavior import RuntimeBehaviorAgent
+    from aisec.agents.taint_analysis import TaintAnalysisAgent
+    from aisec.agents.serialization import SerializationAgent
+    from aisec.agents.git_history_secrets import GitHistorySecretsAgent
+    from aisec.agents.deep_dependency import DeepDependencyAgent
+    from aisec.agents.resource_exhaustion import ResourceExhaustionAgent
+    from aisec.agents.inter_service import InterServiceSecurityAgent
+    from aisec.agents.data_lineage import DataLineagePrivacyAgent
+    from aisec.agents.embedding_leakage import EmbeddingLeakageAgent
 
     for agent_cls in (
         NetworkAgent,
@@ -100,6 +113,19 @@ def register_core_agents() -> None:
         AdversarialAgent,
         CascadeAgent,
         SyntheticContentAgent,
+        StaticAnalysisAgent,
+        DependencyAuditAgent,
+        APISecurityAgent,
+        IaCSecurityAgent,
+        RuntimeBehaviorAgent,
+        TaintAnalysisAgent,
+        SerializationAgent,
+        GitHistorySecretsAgent,
+        DeepDependencyAgent,
+        ResourceExhaustionAgent,
+        InterServiceSecurityAgent,
+        DataLineagePrivacyAgent,
+        EmbeddingLeakageAgent,
     ):
         default_registry.register(agent_cls)
 

@@ -1,0 +1,43 @@
+id: ai-debug-enabled
+
+info:
+  name: AI Debug/Documentation Endpoints Exposed
+  author: aisec
+  severity: medium
+  description: |
+    Detects debug, documentation, and development endpoints that are
+    exposed in production. These endpoints reveal API structure,
+    internal configuration, and may allow direct interaction with
+    the underlying system.
+  tags: ai,debug,misconfig
+  metadata:
+    owasp: LLM06
+    category: security
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/docs"
+      - "{{BaseURL}}/redoc"
+      - "{{BaseURL}}/swagger.json"
+      - "{{BaseURL}}/openapi.json"
+      - "{{BaseURL}}/api-docs"
+      - "{{BaseURL}}/_debug"
+      - "{{BaseURL}}/debug"
+      - "{{BaseURL}}/graphiql"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "swagger"
+          - "openapi"
+          - "FastAPI"
+          - "graphiql"
+          - "debug"
+          - "schema"
+        condition: or

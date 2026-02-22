@@ -1,0 +1,209 @@
+rules:
+  - id: eval-llm-output
+    patterns:
+      - pattern: eval($X)
+      - metavariable-regex:
+          metavariable: $X
+          regex: ".*(llm|completion|response|output|result|generated|chat|answer|reply).*"
+    message: >
+      eval() is called on what appears to be LLM output. Executing LLM
+      responses as code enables prompt injection to achieve remote code
+      execution. Never evaluate AI-generated content directly.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: LLM01
+      category: security
+      technology: [ai, llm]
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      remediation: >
+        Parse and validate LLM output before use. Use ast.literal_eval()
+        for data structures, or implement a safe interpreter for structured
+        commands.
+
+  - id: exec-llm-output
+    patterns:
+      - pattern: exec($X)
+      - metavariable-regex:
+          metavariable: $X
+          regex: ".*(llm|completion|response|output|result|generated|chat|answer|reply).*"
+    message: >
+      exec() is called on what appears to be LLM output. This enables
+      arbitrary code execution through prompt injection attacks.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: LLM01
+      category: security
+      technology: [ai, llm]
+      cwe: "CWE-94: Improper Control of Generation of Code"
+
+  - id: unvalidated-tool-result
+    patterns:
+      - pattern: |
+          $RESULT = $TOOL.run(...)
+          ...
+          $DB.execute($RESULT, ...)
+      - pattern: |
+          $RESULT = $TOOL.invoke(...)
+          ...
+          os.system($RESULT)
+      - pattern: |
+          $RESULT = await $TOOL(...)
+          ...
+          subprocess.run($RESULT, ...)
+    message: >
+      Tool call result is used directly without validation. An attacker
+      could manipulate the tool's output to inject commands or queries.
+      Always validate and sanitize tool outputs before use.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      owasp: ASI02
+      category: security
+      technology: [ai, agents]
+      cwe: "CWE-20: Improper Input Validation"
+
+  - id: prompt-template-injection
+    patterns:
+      - pattern: |
+          $SYSTEM = f"...${{$USER_INPUT}}..."
+      - metavariable-regex:
+          metavariable: $SYSTEM
+          regex: ".*(system|instruction|prompt|role).*"
+    message: >
+      System prompt is constructed with f-string interpolation of user
+      input. This enables indirect prompt injection where user-controlled
+      data modifies the system instructions.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      owasp: LLM01
+      category: security
+      technology: [ai, llm]
+      cwe: "CWE-74: Improper Neutralization of Special Elements in Output"
+      remediation: >
+        Use parameterized prompt templates. Separate system instructions
+        from user data. Validate and sanitize all interpolated values.
+
+  - id: unsafe-pickle-model-load
+    patterns:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+      - pattern: joblib.load(...)
+      - pattern: torch.load(...)
+    message: >
+      Pickle-based model loading detected. Pickle deserialization executes
+      arbitrary code, making it a vector for supply chain attacks through
+      poisoned model files. Use safetensors or other safe formats.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: LLM03
+      category: security
+      technology: [ai, ml]
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      remediation: >
+        Use safetensors format for model files. If torch.load is required,
+        use weights_only=True. Never unpickle files from untrusted sources.
+
+  - id: missing-rate-limit-endpoint
+    patterns:
+      - pattern: |
+          @$APP.route("/v1/completions", ...)
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @$APP.post("/v1/chat/completions", ...)
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @$APP.route("/api/generate", ...)
+          def $FUNC(...):
+              ...
+    message: >
+      AI inference endpoint defined without visible rate limiting. Without
+      rate limits, the endpoint is vulnerable to resource exhaustion and
+      cost attacks (LLM10 - Unbounded Consumption).
+    languages: [python]
+    severity: WARNING
+    metadata:
+      owasp: LLM10
+      category: security
+      technology: [ai, api]
+      cwe: "CWE-770: Allocation of Resources Without Limits or Throttling"
+      remediation: >
+        Add rate limiting middleware (e.g., slowapi, django-ratelimit).
+        Implement per-user and global rate limits on inference endpoints.
+
+  - id: hardcoded-openai-key
+    patterns:
+      - pattern: |
+          $KEY = "sk-..."
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "sk-[a-zA-Z0-9]{20,}"
+    message: >
+      Hardcoded OpenAI API key detected. API keys should be loaded from
+      environment variables or a secrets manager, never committed to code.
+    languages: [python, javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: LLM02
+      category: security
+      technology: [ai, llm]
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: hardcoded-anthropic-key
+    patterns:
+      - pattern: |
+          $KEY = "sk-ant-..."
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "sk-ant-[a-zA-Z0-9]{20,}"
+    message: >
+      Hardcoded Anthropic API key detected. Use environment variables
+      or a secrets manager instead.
+    languages: [python, javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: LLM02
+      category: security
+      technology: [ai, llm]
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: hardcoded-hf-token
+    patterns:
+      - pattern: |
+          $KEY = "hf_..."
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "hf_[a-zA-Z0-9]{20,}"
+    message: >
+      Hardcoded HuggingFace token detected. Use environment variables
+      or a secrets manager instead.
+    languages: [python, javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: LLM02
+      category: security
+      technology: [ai, llm]
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: yaml-unsafe-load
+    patterns:
+      - pattern: yaml.load($X)
+      - pattern: yaml.load($X, Loader=yaml.FullLoader)
+      - pattern: yaml.load($X, Loader=yaml.UnsafeLoader)
+    message: >
+      yaml.load() without SafeLoader can execute arbitrary Python code
+      during deserialization. This is especially dangerous when loading
+      AI model configuration files from untrusted sources.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: ASI05
+      category: security
+      technology: [ai, ml]
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      remediation: "Use yaml.safe_load() or yaml.load(data, Loader=SafeLoader)."

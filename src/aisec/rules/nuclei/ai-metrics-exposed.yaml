@@ -1,0 +1,38 @@
+id: ai-metrics-exposed
+
+info:
+  name: AI Service Metrics Publicly Accessible
+  author: aisec
+  severity: medium
+  description: |
+    Prometheus/OpenMetrics endpoints are publicly accessible, exposing
+    internal service metrics including request rates, error counts,
+    model inference latencies, and resource utilization. This information
+    can be used to profile the system and plan attacks.
+  tags: ai,metrics,misconfig
+  metadata:
+    owasp: LLM06
+    category: security
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/prometheus/metrics"
+      - "{{BaseURL}}/-/metrics"
+      - "{{BaseURL}}/actuator/prometheus"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "# HELP"
+          - "# TYPE"
+          - "process_cpu"
+          - "http_requests_total"
+          - "inference_"
+        condition: or

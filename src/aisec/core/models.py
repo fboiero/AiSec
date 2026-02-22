@@ -124,6 +124,21 @@ class ComplianceReport:
 
 
 @dataclass
+class CorrelatedRisk:
+    """A compound risk identified by cross-referencing findings from multiple agents."""
+
+    id: UUID = field(default_factory=uuid4)
+    name: str = ""
+    description: str = ""
+    severity: Severity = Severity.HIGH
+    contributing_findings: list[UUID] = field(default_factory=list)
+    agents_involved: list[str] = field(default_factory=list)
+    remediation: str = ""
+    timestamp: datetime = field(default_factory=_utcnow)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ScanReport:
     """Complete scan report."""
 
@@ -143,3 +158,4 @@ class ScanReport:
     agent_results: dict[str, AgentResult] = field(default_factory=dict)
     compliance: ComplianceReport = field(default_factory=ComplianceReport)
     all_findings: list[Finding] = field(default_factory=list)
+    correlated_risks: list[CorrelatedRisk] = field(default_factory=list)

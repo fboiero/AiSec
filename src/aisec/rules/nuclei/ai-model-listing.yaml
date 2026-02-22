@@ -1,0 +1,41 @@
+id: ai-model-listing
+
+info:
+  name: AI Model Enumeration Without Authentication
+  author: aisec
+  severity: medium
+  description: |
+    The model listing endpoint is accessible without authentication,
+    allowing attackers to enumerate available models, their versions,
+    and capabilities. This information aids in crafting targeted attacks.
+  tags: ai,auth,misconfig
+  metadata:
+    owasp: LLM06
+    category: security
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/v1/models"
+      - "{{BaseURL}}/api/tags"
+      - "{{BaseURL}}/api/show"
+      - "{{BaseURL}}/models"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "model"
+          - "models"
+          - "id"
+          - "name"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "application/json"

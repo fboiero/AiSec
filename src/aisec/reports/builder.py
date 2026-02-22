@@ -17,6 +17,7 @@ from aisec.core.models import (
     ComplianceChecklist,
     ComplianceCheckItem,
     ComplianceReport,
+    CorrelatedRisk,
     ExecutiveSummary,
     Finding,
     ScanReport,
@@ -89,6 +90,10 @@ class ReportBuilder:
             datetime.now(timezone.utc) - context.started_at
         ).total_seconds()
 
+        # Run cross-agent correlation
+        from aisec.core.correlation import correlate
+        correlated_risks = correlate(context.agent_results)
+
         # Assign AI risk scores to individual findings
         for finding in unique_findings:
             if finding.ai_risk_score is None:
@@ -115,6 +120,7 @@ class ReportBuilder:
             agent_results=dict(context.agent_results),
             compliance=compliance,
             all_findings=unique_findings,
+            correlated_risks=correlated_risks,
         )
 
     # ------------------------------------------------------------------
