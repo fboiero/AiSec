@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aisec"
-version = "0.4.0"
+version = "1.0.0"
 description = "Deep security analysis framework for autonomous AI agent implementations"
 readme = "README.md"
 license = "Apache-2.0"
@@ -25,7 +25,7 @@ keywords = [
     "habeas-data",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: Apache Software License",
@@ -59,7 +59,8 @@ pii = ["presidio-analyzer>=2.2.0", "presidio-anonymizer>=2.2.0"]
 garak = ["garak>=0.9.0"]
 modelscan = ["modelscan>=0.8.0"]
 adversarial = ["httpx>=0.27.0"]
-all = ["aisec[pdf,network,secrets,crypto,pii,garak,modelscan,adversarial]"]
+api = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0"]
+all = ["aisec[pdf,network,secrets,crypto,pii,garak,modelscan,adversarial,api]"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",

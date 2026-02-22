@@ -11,6 +11,7 @@ from aisec.cli.config_cmd import config_app
 from aisec.cli.plugins import plugins_app
 from aisec.cli.report import report_app
 from aisec.cli.scan import scan_app
+from aisec.cli.serve import serve_app
 
 app = typer.Typer(
     name="aisec",
@@ -46,3 +47,4 @@ app.add_typer(scan_app, name="scan")
 app.add_typer(report_app, name="report")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(config_app, name="config")
+app.add_typer(serve_app, name="serve")

@@ -1,0 +1,166 @@
+name: "AiSec - AI Agent Security Scanner"
+description: "Deep security analysis for autonomous AI agent implementations"
+author: "Federico Boiero"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  image:
+    description: "Docker image to scan (e.g., myapp:latest)"
+    required: true
+  agents:
+    description: "Comma-separated list of agents to run (default: all)"
+    required: false
+    default: "all"
+  skip-agents:
+    description: "Comma-separated list of agents to skip"
+    required: false
+    default: ""
+  formats:
+    description: "Output formats: json,html,pdf,sarif"
+    required: false
+    default: "json,sarif"
+  language:
+    description: "Report language (en/es)"
+    required: false
+    default: "en"
+  fail-on:
+    description: "Minimum severity to fail the action (critical/high/medium/low/none)"
+    required: false
+    default: "high"
+  output-dir:
+    description: "Directory for scan results"
+    required: false
+    default: "aisec-results"
+  sarif-upload:
+    description: "Upload SARIF to GitHub Code Scanning (true/false)"
+    required: false
+    default: "true"
+
+outputs:
+  report-path:
+    description: "Path to the main scan report"
+    value: ${{ steps.scan.outputs.report-path }}
+  sarif-path:
+    description: "Path to the SARIF report"
+    value: ${{ steps.scan.outputs.sarif-path }}
+  finding-count:
+    description: "Total number of findings"
+    value: ${{ steps.scan.outputs.finding-count }}
+  critical-count:
+    description: "Number of critical findings"
+    value: ${{ steps.scan.outputs.critical-count }}
+  high-count:
+    description: "Number of high findings"
+    value: ${{ steps.scan.outputs.high-count }}
+  risk-level:
+    description: "Overall risk level"
+    value: ${{ steps.scan.outputs.risk-level }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install AiSec
+      shell: bash
+      run: pip install aisec
+
+    - name: Run AiSec scan
+      id: scan
+      shell: bash
+      env:
+        AISEC_IMAGE: ${{ inputs.image }}
+        AISEC_AGENTS: ${{ inputs.agents }}
+        AISEC_SKIP: ${{ inputs.skip-agents }}
+        AISEC_FORMATS: ${{ inputs.formats }}
+        AISEC_LANGUAGE: ${{ inputs.language }}
+        AISEC_FAIL_ON: ${{ inputs.fail-on }}
+        AISEC_OUTPUT: ${{ inputs.output-dir }}
+      run: |
+        # Build agent arguments
+        AGENT_ARGS=""
+        if [ "$AISEC_AGENTS" != "all" ]; then
+          AGENT_ARGS="--agents $AISEC_AGENTS"
+        fi
+
+        SKIP_ARGS=""
+        if [ -n "$AISEC_SKIP" ]; then
+          SKIP_ARGS="--skip-agents $AISEC_SKIP"
+        fi
+
+        # Run the scan
+        mkdir -p "$AISEC_OUTPUT"
+        aisec scan run "$AISEC_IMAGE" \
+          $AGENT_ARGS \
+          $SKIP_ARGS \
+          --format "$AISEC_FORMATS" \
+          --language "$AISEC_LANGUAGE" \
+          --output "$AISEC_OUTPUT" \
+          --json-summary "$AISEC_OUTPUT/summary.json" \
+          2>&1 || true
+
+        # Parse results from summary
+        if [ -f "$AISEC_OUTPUT/summary.json" ]; then
+          FINDINGS=$(python3 -c "import json; d=json.load(open('$AISEC_OUTPUT/summary.json')); print(d.get('total_findings', 0))")
+          CRITICAL=$(python3 -c "import json; d=json.load(open('$AISEC_OUTPUT/summary.json')); print(d.get('critical_count', 0))")
+          HIGH=$(python3 -c "import json; d=json.load(open('$AISEC_OUTPUT/summary.json')); print(d.get('high_count', 0))")
+          RISK=$(python3 -c "import json; d=json.load(open('$AISEC_OUTPUT/summary.json')); print(d.get('overall_risk_level', 'unknown'))")
+        else
+          FINDINGS=0
+          CRITICAL=0
+          HIGH=0
+          RISK="unknown"
+        fi
+
+        # Set outputs
+        echo "finding-count=$FINDINGS" >> "$GITHUB_OUTPUT"
+        echo "critical-count=$CRITICAL" >> "$GITHUB_OUTPUT"
+        echo "high-count=$HIGH" >> "$GITHUB_OUTPUT"
+        echo "risk-level=$RISK" >> "$GITHUB_OUTPUT"
+
+        # Find report files
+        REPORT=$(find "$AISEC_OUTPUT" -name "*.json" -not -name "summary.json" | head -1)
+        SARIF=$(find "$AISEC_OUTPUT" -name "*.sarif" | head -1)
+        echo "report-path=${REPORT:-$AISEC_OUTPUT}" >> "$GITHUB_OUTPUT"
+        echo "sarif-path=${SARIF:-}" >> "$GITHUB_OUTPUT"
+
+        # Fail based on severity threshold
+        case "$AISEC_FAIL_ON" in
+          critical)
+            [ "$CRITICAL" -gt 0 ] && echo "::error::AiSec found $CRITICAL critical finding(s)" && exit 1
+            ;;
+          high)
+            FAIL_COUNT=$((CRITICAL + HIGH))
+            [ "$FAIL_COUNT" -gt 0 ] && echo "::error::AiSec found $CRITICAL critical and $HIGH high finding(s)" && exit 1
+            ;;
+          medium)
+            [ "$FINDINGS" -gt 0 ] && echo "::error::AiSec found $FINDINGS finding(s)" && exit 1
+            ;;
+          none)
+            echo "Severity threshold set to none -- not failing"
+            ;;
+        esac
+
+        echo "AiSec scan completed: $FINDINGS findings ($CRITICAL critical, $HIGH high)"
+
+    - name: Upload SARIF to GitHub Code Scanning
+      if: inputs.sarif-upload == 'true' && steps.scan.outputs.sarif-path != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
+        category: aisec
+      continue-on-error: true
+
+    - name: Upload scan results as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: aisec-results
+        path: ${{ inputs.output-dir }}
+        retention-days: 30
+      continue-on-error: true
