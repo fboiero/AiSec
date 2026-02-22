@@ -1,0 +1,161 @@
+# AiSec GitLab CI/CD Template
+#
+# Usage: Copy this file to your repository root or include it in your
+# existing .gitlab-ci.yml:
+#
+#   include:
+#     - remote: 'https://raw.githubusercontent.com/fboiero/AiSec/main/.gitlab-ci.yml'
+#
+# Variables:
+#   AISEC_IMAGE: Docker image to scan (required)
+#   AISEC_AGENTS: Agents to run (default: all)
+#   AISEC_SKIP_AGENTS: Agents to skip (default: "")
+#   AISEC_FORMATS: Output formats (default: json,sarif)
+#   AISEC_LANGUAGE: Report language (default: en)
+#   AISEC_FAIL_ON: Minimum severity to fail (default: high)
+
+stages:
+  - test
+  - security
+  - report
+
+variables:
+  AISEC_IMAGE: ""
+  AISEC_AGENTS: "all"
+  AISEC_SKIP_AGENTS: ""
+  AISEC_FORMATS: "json,sarif"
+  AISEC_LANGUAGE: "en"
+  AISEC_FAIL_ON: "high"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+# -- Unit Tests ---------------------------------------------------------------
+
+unit-tests:
+  stage: test
+  image: python:3.11-slim
+  cache:
+    key: pip-cache
+    paths:
+      - .pip-cache/
+  script:
+    - pip install -e ".[dev]"
+    - pytest tests/unit/ -q --tb=short --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+    expire_in: 7 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -- Linting ------------------------------------------------------------------
+
+lint:
+  stage: test
+  image: python:3.11-slim
+  cache:
+    key: pip-cache
+    paths:
+      - .pip-cache/
+  script:
+    - pip install ruff
+    - ruff check src/ tests/
+    - ruff format --check src/ tests/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -- AiSec Security Scan ------------------------------------------------------
+
+aisec-scan:
+  stage: security
+  image: python:3.11
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  cache:
+    key: pip-cache
+    paths:
+      - .pip-cache/
+  before_script:
+    - pip install aisec
+  script:
+    - mkdir -p aisec-results
+
+    # Build agent args
+    - |
+      AGENT_ARGS=""
+      if [ "$AISEC_AGENTS" != "all" ]; then
+        AGENT_ARGS="--agents $AISEC_AGENTS"
+      fi
+
+      SKIP_ARGS=""
+      if [ -n "$AISEC_SKIP_AGENTS" ]; then
+        SKIP_ARGS="--skip-agents $AISEC_SKIP_AGENTS"
+      fi
+
+    # Run the scan
+    - |
+      aisec scan run "$AISEC_IMAGE" \
+        $AGENT_ARGS \
+        $SKIP_ARGS \
+        --format "$AISEC_FORMATS" \
+        --language "$AISEC_LANGUAGE" \
+        --output aisec-results/ \
+        2>&1 || true
+
+    # Check severity threshold
+    - |
+      if [ -f aisec-results/summary.json ]; then
+        CRITICAL=$(python3 -c "import json; d=json.load(open('aisec-results/summary.json')); print(d.get('critical_count', 0))")
+        HIGH=$(python3 -c "import json; d=json.load(open('aisec-results/summary.json')); print(d.get('high_count', 0))")
+
+        case "$AISEC_FAIL_ON" in
+          critical)
+            [ "$CRITICAL" -gt 0 ] && echo "FAILED: $CRITICAL critical finding(s)" && exit 1
+            ;;
+          high)
+            FAIL_COUNT=$((CRITICAL + HIGH))
+            [ "$FAIL_COUNT" -gt 0 ] && echo "FAILED: $CRITICAL critical and $HIGH high finding(s)" && exit 1
+            ;;
+          medium)
+            TOTAL=$(python3 -c "import json; d=json.load(open('aisec-results/summary.json')); print(d.get('total_findings', 0))")
+            [ "$TOTAL" -gt 0 ] && echo "FAILED: $TOTAL finding(s)" && exit 1
+            ;;
+          none)
+            echo "Severity threshold set to none -- not failing"
+            ;;
+        esac
+      fi
+  artifacts:
+    when: always
+    paths:
+      - aisec-results/
+    reports:
+      # GitLab can parse SARIF for security dashboard (Ultimate tier)
+      sast: aisec-results/*.sarif
+    expire_in: 30 days
+  rules:
+    - if: $AISEC_IMAGE != ""
+  allow_failure: false
+
+# -- Upload Report Artifact ---------------------------------------------------
+
+aisec-report:
+  stage: report
+  image: alpine:latest
+  dependencies:
+    - aisec-scan
+  script:
+    - echo "AiSec scan results available in aisec-results/"
+    - ls -la aisec-results/ || true
+  artifacts:
+    paths:
+      - aisec-results/
+    expire_in: 90 days
+  rules:
+    - if: $AISEC_IMAGE != ""
+  when: always

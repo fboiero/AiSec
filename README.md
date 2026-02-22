@@ -22,16 +22,19 @@
 
 AiSec is an open-source, multi-agent security analysis framework designed to perform deep security audits of autonomous AI agent implementations like [OpenClaw](https://openclaw.ai/), custom LLM agents, and other agentic AI systems.
 
-Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS packages, **AiSec analyzes AI-specific attack vectors**: prompt injection, excessive agency, data exfiltration, privacy compliance, and more.
+Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS packages, **AiSec analyzes AI-specific attack vectors**: prompt injection, excessive agency, data exfiltration, privacy compliance, adversarial robustness, synthetic content risks, and multi-agent cascade failures.
 
 ### Key Features
 
-- **Multi-Agent Analysis** - Specialized security agents work in parallel, each focused on a specific attack domain
-- **Docker-Based Sandboxing** - Spins up target AI agents in isolated Docker environments with full network and filesystem instrumentation
-- **Framework Compliance** - Maps findings to OWASP LLM Top 10 (2025), OWASP Agentic Top 10 (2026), and NIST AI RMF
-- **Privacy Regulation Checks** - Compliance assessment for GDPR, CCPA, and Argentina's Habeas Data (Ley 25.326)
+- **15 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
+- **Docker-Based Sandboxing** - Target AI agents run in isolated Docker environments with full network and filesystem instrumentation
+- **8 Compliance Frameworks** - GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST AI 600-1, NIST AI RMF, Argentina AI Bill
+- **100+ Risk Detectors** - Covering prompt injection, cryptographic weaknesses, supply chain, adversarial robustness, deepfakes, and more
 - **AI-CVSS Scoring** - Extended CVSS scoring with AI-specific risk dimensions (autonomy impact, cascade potential, persistence risk)
-- **Rich Reporting** - Detailed reports in JSON, HTML, and PDF with executive summaries and remediation guidance
+- **4 Report Formats** - JSON, HTML, PDF, and SARIF for IDE/CI integration (GitHub Code Scanning, VS Code)
+- **REST API** - `aisec serve` with Django REST Framework for programmatic access
+- **GitHub Action** - Marketplace action with SARIF upload for automated security scanning in CI/CD
+- **Scan History** - SQLite-backed trending and baseline comparison for tracking security posture over time
 - **Plugin System** - Extensible architecture for custom analysis agents and compliance frameworks
 - **Multilingual** - Reports available in English and Spanish
 
@@ -39,8 +42,8 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 
 ```
                          +------------------+
-                         |   AiSec CLI      |
-                         |   (aisec scan)   |
+                         |    AiSec CLI     |
+                         |  scan | serve    |
                          +--------+---------+
                                   |
                          +--------v---------+
@@ -48,35 +51,34 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
                          |   Agent (DAG)    |
                          +--------+---------+
                                   |
-              +-------------------+-------------------+
-              |         |         |         |         |
-        +-----v---+ +---v-----+ +v-------+ +v------+ +v---------+
-        | Network  | |DataFlow | |Privacy | |Prompt | |Supply    |
-        | Agent    | |Agent    | |Agent   | |Sec.   | |Chain     |
-        +----------+ +---------+ +--------+ |Agent  | |Agent     |
-                                             +-------+ +----------+
-              +-------------------+-------------------+
-              |                                       |
-        +-----v-------+                       +-------v------+
-        | Permission  |                       |   Output     |
-        | Agent       |                       |   Agent      |
-        +-------------+                       +--------------+
-              |
-    +---------v-----------+
-    |   Docker Sandbox    |
-    |  +---------------+  |
-    |  | Target Agent  |  |
-    |  | (e.g. OpenClaw)|  |
-    |  +---------------+  |
-    |  | tcpdump sidecar|  |
-    |  | fs-monitor     |  |
-    |  +---------------+  |
-    +---------------------+
-              |
-    +---------v-----------+
-    |   Report Builder    |
-    |  JSON | HTML | PDF  |
-    +---------------------+
+    +----------+----------+-------+-------+----------+----------+
+    |          |          |       |       |          |          |
++---v----+ +--v-----+ +--v--+ +-v----+ +-v------+ +v-------+ +v------+
+|Network | |DataFlow| |Priv.| |Prompt| |Supply  | |Permis. | |Output |
+|Agent   | |Agent   | |Agent| |Sec.  | |Chain   | |Agent   | |Agent  |
++--------+ +--------+ +-----+ +------+ +--------+ +--------+ +-------+
+    |          |          |       |       |          |          |
++---v----+ +--v-----+ +--v--+ +-v----+ +-v------+ +v-------+ +v------+
+|Crypto  | |SBOM    | |Garak| |Guard.| |Model   | |Advers. | |Cascade|
+|Agent   | |Agent   | |Agent| |Agent | |Scan    | |Agent   | |Agent  |
++--------+ +--------+ +-----+ +------+ +--------+ +--------+ +-------+
+                                                                  |
+                                                          +-------v--------+
+                                                          |  Synthetic     |
+                                                          |  Content Agent |
+                                                          +----------------+
+                          |
+                +---------v-----------+
+                |   Docker Sandbox    |
+                |  +---------------+  |
+                |  | Target Agent  |  |
+                |  +---------------+  |
+                +---------------------+
+                          |
+                +---------v-----------+
+                |   Report Builder    |
+                | JSON|HTML|PDF|SARIF |
+                +---------------------+
 ```
 
 ## Security Analysis Agents
@@ -84,12 +86,20 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 | Agent | Focus Area | OWASP Mapping |
 |-------|-----------|---------------|
 | **NetworkAgent** | Open ports, WebSocket security, TLS config, DNS exfiltration | LLM09, ASI07, ASI08 |
-| **DataFlowAgent** | PII detection, encryption at rest/transit, data retention | LLM02, ASI06 |
+| **DataFlowAgent** | PII detection (Presidio), encryption at rest/transit, data retention | LLM02, ASI06 |
 | **PrivacyAgent** | GDPR, CCPA, Habeas Data compliance assessment | LLM02 |
 | **PromptSecurityAgent** | Direct/indirect prompt injection, tool hijacking, jailbreaks | LLM01, LLM07, ASI01 |
 | **SupplyChainAgent** | Docker layer CVEs, dependency vulnerabilities, SBOM | LLM03, ASI04, ASI05 |
 | **PermissionAgent** | Excessive agency, privilege escalation, tool access scope | LLM06, ASI02, ASI03 |
 | **OutputAgent** | Output sanitization, information leakage, XSS vectors | LLM05, ASI09 |
+| **CryptoAuditAgent** | TLS/SSL config, cipher suites, key management, quantum readiness | LLM02, LLM09 |
+| **SBOMAgent** | Software Bill of Materials, license compliance, dependency depth | LLM03, ASI04 |
+| **GarakAgent** | LLM vulnerability scanning (50+ probes), jailbreak, data leakage | LLM01, LLM04, LLM09 |
+| **GuardrailAgent** | Safety guardrail presence (NeMo, Guardrails AI, LLM Guard), bypass testing | LLM05, ASI01 |
+| **ModelScanAgent** | Malicious model files (Pickle, H5), backdoor triggers, provenance | LLM03, LLM04, ASI04 |
+| **AdversarialAgent** | Evasion attacks, encoding bypass, multi-turn manipulation, fuzzing | LLM01, ASI01 |
+| **CascadeAgent** | Multi-agent dependency graphs, cascade failure, inter-agent auth, trust boundaries | ASI07, ASI08 |
+| **SyntheticContentAgent** | Deepfake detection, voice cloning, C2PA provenance, watermarking | LLM09, ASI09 |
 
 ## Quick Start
 
@@ -106,7 +116,10 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 pip install aisec
 
 # Install with all optional dependencies
-pip install aisec[all]
+pip install "aisec[all]"
+
+# Install with REST API server
+pip install "aisec[api]"
 
 # Or install from source
 git clone https://github.com/fboiero/AiSec.git
@@ -118,27 +131,67 @@ pip install -e ".[dev]"
 
 ```bash
 # Run a full security scan against an AI agent Docker image
-aisec scan ghcr.io/openclaw/openclaw:latest
+aisec scan run ghcr.io/openclaw/openclaw:latest
 
 # Scan with specific agents only
-aisec scan myagent:latest --agents network,prompt_security,permission
+aisec scan run myagent:latest --agents network,prompt_security,permission
 
-# Generate reports in multiple formats
-aisec scan myagent:latest --format json,html,pdf
+# Generate reports in multiple formats (including SARIF for IDE integration)
+aisec scan run myagent:latest --format json,html,pdf,sarif
 
 # Generate report in Spanish
-aisec scan myagent:latest --lang es
+aisec scan run myagent:latest --lang es
 
-# Run with specific compliance frameworks
-aisec scan myagent:latest --compliance gdpr,habeas_data
+# Run with TUI dashboard
+aisec scan run myagent:latest --dashboard
+```
 
-# Use a configuration file
-aisec scan myagent:latest --config aisec.yaml
+### REST API
+
+```bash
+# Start the API server (Django REST Framework)
+aisec serve --port 8000
+
+# Submit a scan via API
+curl -X POST http://localhost:8000/api/scan/ \
+  -H "Content-Type: application/json" \
+  -d '{"image": "myagent:latest"}'
+
+# Check scan status
+curl http://localhost:8000/api/scan/<scan-id>/
+
+# List all scans
+curl http://localhost:8000/api/scans/
+
+# Health check
+curl http://localhost:8000/api/health/
+```
+
+### GitHub Action
+
+```yaml
+# .github/workflows/aisec.yml
+name: AI Agent Security Scan
+on: [push, pull_request]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build agent image
+        run: docker build -t myagent:latest .
+
+      - name: Run AiSec scan
+        uses: fboiero/AiSec@v1
+        with:
+          image: myagent:latest
+          formats: json,sarif
+          fail-on: high
 ```
 
 ### Configuration
-
-Generate a default configuration file:
 
 ```bash
 aisec config init
@@ -150,26 +203,27 @@ This creates `aisec.yaml`:
 target:
   image: ""
   name: ""
-  type: "generic"  # openclaw, generic, custom
+  type: "generic"
 
 scan:
   timeout: 3600
   agents:
-    - network
-    - dataflow
-    - privacy
-    - prompt_security
-    - supply_chain
-    - permission
-    - output
+    - all
 
 report:
-  format: ["json", "html"]
+  format: ["json", "html", "sarif"]
   language: "en"
   output_dir: "./aisec-reports"
 
 compliance:
-  frameworks: ["gdpr", "ccpa", "habeas_data"]
+  frameworks:
+    - gdpr
+    - ccpa
+    - habeas_data
+    - eu_ai_act
+    - iso_42001
+    - nist_ai_600_1
+    - argentina_ai
 ```
 
 ## Compliance Frameworks
@@ -183,28 +237,37 @@ Assessment against agent-specific risks: goal hijacking, tool misuse, identity a
 ### NIST AI Risk Management Framework
 Mapping to GOVERN, MAP, MEASURE, and MANAGE functions with subcategory-level assessment.
 
+### NIST AI 600-1 (Generative AI Profile)
+200+ action items across 12 GenAI-specific risk categories: confabulation, data privacy, information integrity, CBRN information, human-AI interaction, and more.
+
+### EU AI Act (Regulation 2024/1689)
+22 checks covering risk classification (Art. 6), prohibited practices (Art. 5), high-risk requirements (Art. 8-15), GPAI model obligations (Art. 53-55), transparency (Art. 50), fundamental rights impact assessment (Art. 27), and post-market monitoring (Art. 72).
+
+### ISO/IEC 42001:2023
+28 checks against the AI Management System standard: context, leadership, planning, support, operation, performance evaluation, improvement, and Annex A controls.
+
+### Argentina AI Governance
+15 checks covering Ley 25.326 AI extensions, Bill 3003-D-2024 (AI Regulation Bill), AAIP guidance, and provincial protocols (Buenos Aires, Santa Fe).
+
 ### Privacy Regulations
 - **GDPR** (EU) - Articles 5-9, 12-22, 25, 32-35
 - **CCPA** (California) - Right to know, delete, opt-out
 - **Habeas Data** (Argentina, Ley 25.326) - Articles 2-8, 11-12, 14, 16, 26-27
 
-## Report Example
+## Report Formats
 
-AiSec generates comprehensive security reports with:
-
-- **Executive Summary** - Overall risk level, key statistics, top risks
-- **Risk Dashboard** - Composite AI risk score (0-100) across 5 dimensions
-- **Framework Assessment** - Finding-by-finding OWASP and NIST mapping
-- **Compliance Checklists** - Pass/fail per regulation article
-- **Detailed Findings** - Evidence, AI-CVSS score, remediation steps
-- **Appendices** - Methodology, raw data references, glossary
+| Format | Use Case | Features |
+|--------|----------|----------|
+| **JSON** | Programmatic access, CI/CD | Full finding details, machine-readable |
+| **HTML** | Human review | Dark theme, interactive cards, risk radar |
+| **PDF** | Executive reporting | Print-ready, WeasyPrint rendering |
+| **SARIF** | IDE integration | GitHub Code Scanning, VS Code, Azure DevOps |
 
 ## Plugin Development
 
 Create custom analysis agents:
 
 ```python
-# my_plugin.py
 from aisec.agents.base import BaseAgent
 from aisec.plugins.interface import AiSecPlugin
 
@@ -213,7 +276,6 @@ class MyCustomAgent(BaseAgent):
     description = "Custom security check"
 
     async def analyze(self):
-        # Your analysis logic here
         self.add_finding(...)
 
 class MyPlugin(AiSecPlugin):
@@ -234,11 +296,8 @@ my-plugin = "my_plugin:MyPlugin"
 ## Development
 
 ```bash
-# Clone the repository
 git clone https://github.com/fboiero/AiSec.git
 cd AiSec
-
-# Install in development mode
 pip install -e ".[dev,all]"
 
 # Run tests
@@ -255,18 +314,21 @@ mypy src/aisec/
 
 - [x] Core agent framework and orchestrator
 - [x] Docker sandbox with network/filesystem instrumentation
-- [x] 7 specialized security analysis agents
+- [x] 15 specialized security analysis agents
 - [x] OWASP LLM Top 10 + Agentic Top 10 mapping
-- [x] NIST AI RMF assessment
-- [x] GDPR, CCPA, Habeas Data compliance
-- [x] AI-CVSS risk scoring
-- [x] JSON, HTML, PDF report generation
-- [ ] Interactive TUI dashboard (Rich Live)
-- [ ] CI/CD integration (GitHub Actions, GitLab CI)
-- [ ] OpenClaw-specific deep analysis plugin
-- [ ] Multi-agent system cascade analysis
-- [ ] API mode for programmatic access
+- [x] NIST AI RMF + NIST AI 600-1 assessment
+- [x] 8 compliance frameworks (GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST 600-1, Argentina AI)
+- [x] AI-CVSS risk scoring with 100+ risk detectors
+- [x] JSON, HTML, PDF, SARIF report generation
+- [x] Interactive TUI dashboard (Rich Live)
+- [x] REST API server (Django REST Framework)
+- [x] GitHub Action for CI/CD integration
+- [x] Multi-agent cascade analysis
+- [x] Synthetic content / deepfake detection
+- [x] Scan history and trending (SQLite)
 - [ ] Cloud deployment (AWS, GCP, Azure)
+- [ ] Real-time runtime monitoring (Falco integration)
+- [ ] Web UI dashboard
 
 ## Contributing
 
@@ -284,6 +346,8 @@ AiSec is licensed under the [Apache License 2.0](LICENSE).
 
 - [OWASP GenAI Security Project](https://genai.owasp.org/) for the LLM and Agentic Top 10 frameworks
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) for AI governance standards
+- [EU AI Act](https://eur-lex.europa.eu/eli/reg/2024/1689/oj) for comprehensive AI regulation
+- [ISO/IEC 42001](https://www.iso.org/standard/81230.html) for AI management system standards
 - [Trivy](https://trivy.dev/) for container vulnerability scanning inspiration
 - The open-source AI security research community
 
