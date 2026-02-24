@@ -1,0 +1,94 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}New Scan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>New Scan</h1>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header"><h3>Scan Configuration</h3></div>
+        <div class="card-body">
+            <form method="POST" action="/dashboard/new-scan/">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label class="form-label">Docker Image *</label>
+                    <input type="text" name="image" class="form-input" required
+                           placeholder="e.g. myapp:latest" list="target-list">
+                    <datalist id="target-list">
+                        {% for t in targets %}
+                        <option value="{{ t }}">
+                        {% endfor %}
+                    </datalist>
+                    <div class="form-hint">Docker image to scan for security vulnerabilities</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Agents</label>
+                    <input type="text" name="agents" class="form-input" value="all"
+                           placeholder="all" list="agent-list">
+                    <datalist id="agent-list">
+                        {% for a in agent_names %}
+                        <option value="{{ a }}">
+                        {% endfor %}
+                    </datalist>
+                    <div class="form-hint">Comma-separated agent names or "all" for all agents</div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Language</label>
+                        <select name="language" class="form-select">
+                            <option value="en" selected>English</option>
+                            <option value="es">Spanish</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Output Formats</label>
+                        <div>
+                            <label class="form-checkbox">
+                                <input type="checkbox" name="formats" value="json" checked> JSON
+                            </label>
+                            <label class="form-checkbox">
+                                <input type="checkbox" name="formats" value="html" checked> HTML
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg" style="width:100%;margin-top:8px">
+                    Start Scan
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h3>Help</h3></div>
+        <div class="card-body text-small text-muted">
+            <h4 class="mb-1">Docker Image</h4>
+            <p class="mb-2">Specify the Docker image to analyze. The image must be available locally or pullable from a registry.</p>
+
+            <h4 class="mb-1">Agents</h4>
+            <p class="mb-2">Select which security agents to run. Use "all" for comprehensive analysis, or specify individual agents separated by commas (e.g. "network,privacy,prompt_security").</p>
+
+            <h4 class="mb-1">Language</h4>
+            <p class="mb-2">Language for the generated security report.</p>
+
+            <h4 class="mb-1">Available Agents ({{ agent_names|length }})</h4>
+            <div class="d-flex gap-1 flex-wrap">
+                {% for a in agent_names %}
+                <span class="badge badge-info">{{ a }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

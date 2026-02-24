@@ -1,0 +1,192 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <a href="/dashboard/new-scan/" class="btn btn-primary">+ New Scan</a>
+</div>
+
+<!-- Summary Cards -->
+<div class="stat-cards">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_scans }}</div>
+        <div class="stat-label">Total Scans</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.unique_targets }}</div>
+        <div class="stat-label">Unique Targets</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_findings }}</div>
+        <div class="stat-label">Total Findings</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value text-cyan">{{ active_scans|length }}</div>
+        <div class="stat-label">Active Scans</div>
+    </div>
+</div>
+
+<!-- Active Scans -->
+{% if active_scans %}
+<div class="card mb-3">
+    <div class="card-header">
+        <h3><span class="spinner" style="margin-right:8px"></span> Active Scans</h3>
+    </div>
+    <div class="table-container" style="border:none;margin:0">
+        <table>
+            <thead>
+                <tr>
+                    <th>Scan ID</th>
+                    <th>Image</th>
+                    <th>Started</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scan in active_scans %}
+                <tr>
+                    <td><a href="/dashboard/scans/{{ scan.scan_id }}/">{{ scan.scan_id|truncatechars:12 }}</a></td>
+                    <td class="text-mono">{{ scan.image }}</td>
+                    <td class="text-muted">{{ scan.started_at|default:"Queued" }}</td>
+                    <td>
+                        <div hx-get="/dashboard/partials/scan-status/{{ scan.scan_id }}/"
+                             hx-trigger="every 2s" hx-swap="innerHTML">
+                            <span class="badge badge-{{ scan.status }}">{{ scan.status }}</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Charts -->
+<div class="grid-2 mb-3">
+    <div class="card">
+        <div class="card-header"><h3>Severity Distribution</h3></div>
+        <div class="chart-container">
+            <canvas id="severityChart"></canvas>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3>Findings Trend</h3></div>
+        <div class="chart-container">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Scans -->
+<div class="card">
+    <div class="card-header">
+        <h3>Recent Scans</h3>
+        <a href="/dashboard/scans/" class="btn btn-sm btn-secondary">View All</a>
+    </div>
+    <div class="table-container" style="border:none;margin:0">
+        <table>
+            <thead>
+                <tr>
+                    <th>Target</th>
+                    <th>Date</th>
+                    <th>Findings</th>
+                    <th>Risk Level</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scan in recent_scans %}
+                <tr style="cursor:pointer" onclick="location.href='/dashboard/scans/{{ scan.scan_id }}/'">
+                    <td>
+                        <span class="text-mono">{{ scan.target_image }}</span>
+                        {% if scan.target_name != scan.target_image %}
+                        <br><span class="text-small text-muted">{{ scan.target_name }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted">{{ scan.started_at|truncatechars:16 }}</td>
+                    <td>
+                        <span class="badge badge-critical" title="Critical">{{ scan.critical_count }}</span>
+                        <span class="badge badge-high" title="High">{{ scan.high_count }}</span>
+                        <span class="badge badge-medium" title="Medium">{{ scan.medium_count }}</span>
+                        <span class="badge badge-low" title="Low">{{ scan.low_count }}</span>
+                    </td>
+                    <td><span class="badge badge-{{ scan.overall_risk_level|lower }}">{{ scan.overall_risk_level }}</span></td>
+                    <td>{{ scan.ai_risk_score|floatformat:1 }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="table-empty">No scans yet. <a href="/dashboard/new-scan/">Start your first scan</a></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sevColors = {
+        critical: '#dc3545', high: '#fd7e14', medium: '#ffc107',
+        low: '#28a745', info: '#17a2b8'
+    };
+
+    // Severity donut
+    const sevData = JSON.parse('{{ severity_dist|safe }}');
+    const sevLabels = Object.keys(sevData);
+    const sevValues = Object.values(sevData);
+    if (sevLabels.length > 0) {
+        new Chart(document.getElementById('severityChart'), {
+            type: 'doughnut',
+            data: {
+                labels: sevLabels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+                datasets: [{
+                    data: sevValues,
+                    backgroundColor: sevLabels.map(l => sevColors[l] || '#6c757d'),
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#e0e0e0', padding: 16 } }
+                }
+            }
+        });
+    }
+
+    // Trend line
+    const trendData = JSON.parse('{{ trend_data|safe }}');
+    if (trendData.length > 0) {
+        new Chart(document.getElementById('trendChart'), {
+            type: 'line',
+            data: {
+                labels: trendData.map(d => d.scan_date),
+                datasets: ['critical', 'high', 'medium', 'low', 'info'].map(sev => ({
+                    label: sev.charAt(0).toUpperCase() + sev.slice(1),
+                    data: trendData.map(d => d[sev + '_count'] || 0),
+                    borderColor: sevColors[sev],
+                    backgroundColor: sevColors[sev] + '22',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2
+                }))
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } },
+                    y: { stacked: true, ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e0e0e0' } }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

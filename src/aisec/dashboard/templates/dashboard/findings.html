@@ -1,0 +1,115 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Findings Explorer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Findings Explorer</h1>
+</div>
+
+<!-- Severity Summary -->
+<div class="d-flex gap-2 flex-wrap mb-3">
+    {% for sev, count in severity_dist.items %}
+    <div class="badge badge-{{ sev|lower }}" style="font-size:0.85rem;padding:6px 14px">
+        {{ sev|capfirst }}: {{ count }}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Filters -->
+<div class="form-inline mb-3" id="finding-filters">
+    <div class="form-group">
+        <label class="form-label">Severity</label>
+        <select class="form-select" name="severity" style="min-width:150px"
+                hx-get="/dashboard/partials/finding-rows/"
+                hx-target="#finding-rows"
+                hx-swap="innerHTML"
+                hx-include="#finding-filters">
+            <option value="">All</option>
+            <option value="critical" {% if selected_severity == "critical" %}selected{% endif %}>Critical</option>
+            <option value="high" {% if selected_severity == "high" %}selected{% endif %}>High</option>
+            <option value="medium" {% if selected_severity == "medium" %}selected{% endif %}>Medium</option>
+            <option value="low" {% if selected_severity == "low" %}selected{% endif %}>Low</option>
+            <option value="info" {% if selected_severity == "info" %}selected{% endif %}>Info</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label class="form-label">Agent</label>
+        <input type="text" class="form-input" name="agent" value="{{ selected_agent }}"
+               placeholder="Filter by agent..." style="min-width:180px"
+               hx-get="/dashboard/partials/finding-rows/"
+               hx-target="#finding-rows"
+               hx-swap="innerHTML"
+               hx-include="#finding-filters"
+               hx-trigger="keyup changed delay:400ms">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Framework</label>
+        <input type="text" class="form-input" name="framework" value="{{ selected_framework }}"
+               placeholder="OWASP, NIST..." style="min-width:180px"
+               hx-get="/dashboard/partials/finding-rows/"
+               hx-target="#finding-rows"
+               hx-swap="innerHTML"
+               hx-include="#finding-filters"
+               hx-trigger="keyup changed delay:400ms">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status" style="min-width:130px"
+                hx-get="/dashboard/partials/finding-rows/"
+                hx-target="#finding-rows"
+                hx-swap="innerHTML"
+                hx-include="#finding-filters">
+            <option value="">All</option>
+            <option value="open" {% if selected_status == "open" %}selected{% endif %}>Open</option>
+            <option value="resolved" {% if selected_status == "resolved" %}selected{% endif %}>Resolved</option>
+            <option value="accepted" {% if selected_status == "accepted" %}selected{% endif %}>Accepted</option>
+            <option value="false_positive" {% if selected_status == "false_positive" %}selected{% endif %}>False Positive</option>
+        </select>
+    </div>
+</div>
+
+<!-- Findings Table -->
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>Agent</th>
+                <th>CVSS</th>
+                <th>AI Risk</th>
+                <th>Status</th>
+                <th>Target</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody id="finding-rows">
+            {% for f in findings %}
+            <tr>
+                <td>{{ f.title }}</td>
+                <td><span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+                <td class="text-mono text-small">{{ f.agent }}</td>
+                <td>{{ f.cvss_score|floatformat:1|default:"-" }}</td>
+                <td>{{ f.ai_risk_score|floatformat:1|default:"-" }}</td>
+                <td>{{ f.status }}</td>
+                <td class="text-mono text-small">{{ f.target_image }}</td>
+                <td class="text-muted">{{ f.scan_date|truncatechars:10 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="table-empty">No findings match the current filters.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if findings|length == 20 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page|add:"-1" }}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_agent %}&agent={{ selected_agent }}{% endif %}{% if selected_framework %}&framework={{ selected_framework }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">Prev</a>
+    {% endif %}
+    <span class="active">{{ page }}</span>
+    <a href="?page={{ page|add:"1" }}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_agent %}&agent={{ selected_agent }}{% endif %}{% if selected_framework %}&framework={{ selected_framework }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">Next</a>
+</div>
+{% endif %}
+{% endblock %}

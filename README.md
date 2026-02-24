@@ -35,6 +35,7 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 - **26 Correlation Rules** - Cross-agent compound risk detection (e.g., "MCP no auth + unrestricted tools = agent takeover")
 - **AI-CVSS Scoring** - Extended CVSS scoring with AI-specific risk dimensions (autonomy impact, cascade potential, persistence risk)
 - **4 Report Formats** - JSON, HTML, PDF, and SARIF for IDE/CI integration (GitHub Code Scanning, VS Code)
+- **Web UI Dashboard** - Interactive web dashboard at `/dashboard/` with scan management, trend charts, and findings explorer
 - **REST API** - `aisec serve` with Django REST Framework for programmatic access
 - **GitHub Action** - Marketplace action with SARIF upload for automated security scanning in CI/CD
 - **Scan History** - SQLite-backed trending and baseline comparison for tracking security posture over time
@@ -214,6 +215,19 @@ required_agents:
 thresholds:
   max_critical: 0
   max_high: 5
+```
+
+### Web UI Dashboard
+
+```bash
+# Start the server with dashboard (default)
+aisec serve --port 8000
+
+# Open http://localhost:8000/dashboard/ in your browser
+# Features: scan management, trend charts, findings explorer, policy viewer
+
+# Disable dashboard (API only)
+aisec serve --no-dashboard
 ```
 
 ### REST API
@@ -407,7 +421,7 @@ mypy src/aisec/
 - [x] 26 cross-agent correlation rules
 - [ ] Cloud deployment (AWS, GCP, Azure)
 - [ ] Real-time runtime monitoring (Falco integration)
-- [ ] Web UI dashboard
+- [x] Web UI dashboard (Chart.js, Alpine.js, HTMX)
 
 ## Contributing
 

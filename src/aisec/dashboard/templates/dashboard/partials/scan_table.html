@@ -1,0 +1,41 @@
+{% for scan in scans %}
+<tr>
+    <td>
+        <a href="/dashboard/scans/{{ scan.scan_id }}/" class="text-mono">{{ scan.target_image }}</a>
+        {% if scan.target_name and scan.target_name != scan.target_image %}
+        <br><span class="text-small text-muted">{{ scan.target_name }}</span>
+        {% endif %}
+    </td>
+    <td class="text-muted">{{ scan.started_at|truncatechars:16 }}</td>
+    <td>
+        {% if scan.critical_count %}<span class="badge badge-critical">{{ scan.critical_count }}C</span> {% endif %}
+        {% if scan.high_count %}<span class="badge badge-high">{{ scan.high_count }}H</span> {% endif %}
+        {% if scan.medium_count %}<span class="badge badge-medium">{{ scan.medium_count }}M</span> {% endif %}
+        {% if scan.low_count %}<span class="badge badge-low">{{ scan.low_count }}L</span> {% endif %}
+        <span class="text-muted text-small">({{ scan.total_findings }})</span>
+    </td>
+    <td><span class="badge badge-{{ scan.overall_risk_level|lower }}">{{ scan.overall_risk_level }}</span></td>
+    <td>{{ scan.ai_risk_score|floatformat:1 }}</td>
+    <td><a href="/dashboard/scans/{{ scan.scan_id }}/" class="btn btn-sm btn-secondary">View</a></td>
+</tr>
+{% empty %}
+<tr><td colspan="6" class="table-empty">No scans found.</td></tr>
+{% endfor %}
+
+{% if total_pages > 1 %}
+<tr>
+    <td colspan="6" style="text-align:center;padding:16px">
+        {% if page > 1 %}
+        <a hx-get="/dashboard/partials/scan-table/?page={{ page|add:"-1" }}"
+           hx-target="#scan-table-body" hx-swap="innerHTML"
+           class="btn btn-sm btn-secondary">Prev</a>
+        {% endif %}
+        <span class="text-muted" style="margin:0 12px">Page {{ page }} / {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a hx-get="/dashboard/partials/scan-table/?page={{ page|add:"1" }}"
+           hx-target="#scan-table-body" hx-swap="innerHTML"
+           class="btn btn-sm btn-secondary">Next</a>
+        {% endif %}
+    </td>
+</tr>
+{% endif %}

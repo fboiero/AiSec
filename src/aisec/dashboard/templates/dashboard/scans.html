@@ -1,0 +1,86 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Scans{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Scans <span class="text-small text-muted">({{ total }})</span></h1>
+    <a href="/dashboard/new-scan/" class="btn btn-primary">+ New Scan</a>
+</div>
+
+<!-- Filters -->
+<div class="form-inline mb-3">
+    <div class="form-group">
+        <label class="form-label">Target Image</label>
+        <select class="form-select" id="target-filter"
+                hx-get="/dashboard/partials/scan-table/"
+                hx-target="#scan-table-body"
+                hx-swap="innerHTML"
+                hx-include="#target-filter"
+                name="target" style="min-width:250px">
+            <option value="">All Targets</option>
+            {% for t in targets %}
+            <option value="{{ t }}" {% if t == selected_target %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<!-- Scan Table -->
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Target Image</th>
+                <th>Date</th>
+                <th>Findings</th>
+                <th>Risk Level</th>
+                <th>Risk Score</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="scan-table-body">
+            {% for scan in scans %}
+            <tr>
+                <td>
+                    <a href="/dashboard/scans/{{ scan.scan_id }}/" class="text-mono">{{ scan.target_image }}</a>
+                    {% if scan.target_name and scan.target_name != scan.target_image %}
+                    <br><span class="text-small text-muted">{{ scan.target_name }}</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted">{{ scan.started_at|truncatechars:16 }}</td>
+                <td>
+                    {% if scan.critical_count %}<span class="badge badge-critical">{{ scan.critical_count }}C</span> {% endif %}
+                    {% if scan.high_count %}<span class="badge badge-high">{{ scan.high_count }}H</span> {% endif %}
+                    {% if scan.medium_count %}<span class="badge badge-medium">{{ scan.medium_count }}M</span> {% endif %}
+                    {% if scan.low_count %}<span class="badge badge-low">{{ scan.low_count }}L</span> {% endif %}
+                    <span class="text-muted text-small">({{ scan.total_findings }} total)</span>
+                </td>
+                <td><span class="badge badge-{{ scan.overall_risk_level|lower }}">{{ scan.overall_risk_level }}</span></td>
+                <td>{{ scan.ai_risk_score|floatformat:1 }}</td>
+                <td><a href="/dashboard/scans/{{ scan.scan_id }}/" class="btn btn-sm btn-secondary">View</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="table-empty">No scans found. <a href="/dashboard/new-scan/">Start a scan</a></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page|add:"-1" }}{% if selected_target %}&target={{ selected_target }}{% endif %}">Prev</a>
+    {% else %}
+    <span class="disabled">Prev</span>
+    {% endif %}
+    <span class="active">{{ page }}</span>
+    <span class="text-muted">/ {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="?page={{ page|add:"1" }}{% if selected_target %}&target={{ selected_target }}{% endif %}">Next</a>
+    {% else %}
+    <span class="disabled">Next</span>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

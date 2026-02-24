@@ -1,0 +1,14 @@
+{% for f in findings %}
+<tr>
+    <td>{{ f.title }}</td>
+    <td><span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+    <td class="text-mono text-small">{{ f.agent }}</td>
+    <td>{{ f.cvss_score|floatformat:1|default:"-" }}</td>
+    <td>{{ f.ai_risk_score|floatformat:1|default:"-" }}</td>
+    <td>{{ f.status }}</td>
+    <td class="text-mono text-small">{{ f.target_image }}</td>
+    <td class="text-muted">{{ f.scan_date|truncatechars:10 }}</td>
+</tr>
+{% empty %}
+<tr><td colspan="8" class="table-empty">No findings match the current filters.</td></tr>
+{% endfor %}

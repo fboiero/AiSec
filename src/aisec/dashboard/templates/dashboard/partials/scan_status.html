@@ -1,0 +1,12 @@
+{% if status == "pending" or status == "running" %}
+<div hx-get="/dashboard/partials/scan-status/{{ scan_id }}/"
+     hx-trigger="every 2s" hx-swap="innerHTML">
+    <span class="badge badge-{{ status }}">{% if status == "running" %}Running...{% else %}Pending{% endif %}</span>
+</div>
+{% elif status == "completed" %}
+<span class="badge badge-completed">Completed</span>
+{% elif status == "failed" %}
+<span class="badge badge-failed">Failed</span>
+{% else %}
+<span class="badge">{{ status }}</span>
+{% endif %}

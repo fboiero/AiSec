@@ -304,6 +304,96 @@ class ScanHistory:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def severity_distribution(self) -> dict[str, int]:
+        """Aggregate severity counts across all findings."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT severity, COUNT(*) as cnt FROM findings GROUP BY severity"
+        ).fetchall()
+        return {r["severity"]: r["cnt"] for r in rows}
+
+    def search_findings(
+        self,
+        severity: str | None = None,
+        agent: str | None = None,
+        framework: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Filtered/paginated cross-scan finding search."""
+        conn = self._get_conn()
+        clauses: list[str] = []
+        params: list[Any] = []
+
+        if severity:
+            clauses.append("f.severity = ?")
+            params.append(severity)
+        if agent:
+            clauses.append("f.agent = ?")
+            params.append(agent)
+        if framework:
+            clauses.append(
+                "(f.owasp_llm LIKE ? OR f.owasp_agentic LIKE ? OR f.nist_ai_rmf LIKE ?)"
+            )
+            pattern = f"%{framework}%"
+            params.extend([pattern, pattern, pattern])
+        if status:
+            clauses.append("f.status = ?")
+            params.append(status)
+
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.extend([limit, offset])
+
+        rows = conn.execute(
+            f"SELECT f.*, s.target_image, s.started_at AS scan_date "
+            f"FROM findings f JOIN scans s ON f.scan_id = s.scan_id"
+            f"{where} ORDER BY s.started_at DESC LIMIT ? OFFSET ?",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def global_trend(self, limit: int = 30) -> list[dict[str, Any]]:
+        """Aggregate trend across all targets by date."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT DATE(started_at) as scan_date,
+                      COUNT(*) as scan_count,
+                      SUM(total_findings) as total_findings,
+                      SUM(critical_count) as critical_count,
+                      SUM(high_count) as high_count,
+                      SUM(medium_count) as medium_count,
+                      SUM(low_count) as low_count,
+                      SUM(info_count) as info_count,
+                      AVG(ai_risk_score) as avg_risk_score
+               FROM scans
+               GROUP BY DATE(started_at)
+               ORDER BY scan_date DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def distinct_targets(self) -> list[str]:
+        """Return unique target images for dropdown selectors."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT target_image FROM scans ORDER BY target_image"
+        ).fetchall()
+        return [r["target_image"] for r in rows]
+
+    def count_scans(self, target_image: str | None = None) -> int:
+        """Total scan count, optionally filtered by target image."""
+        conn = self._get_conn()
+        if target_image:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM scans WHERE target_image = ?",
+                (target_image,),
+            ).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) FROM scans").fetchone()
+        return row[0]
+
     def delete_scan(self, scan_id: str) -> bool:
         """Delete a scan and its findings from history."""
         conn = self._get_conn()

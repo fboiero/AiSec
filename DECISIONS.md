@@ -1,5 +1,39 @@
 # AiSec Decision Log
 
+## 2026-02-23 — v1.6.0 Web UI Dashboard
+
+### What was asked
+Implement AiSec v1.6.0: Interactive web dashboard served at /dashboard/ with scan management, trend charts, findings explorer, and policy viewer. 17 new files, 5 files modified.
+
+### Decision made
+Implemented the full plan with these architectural choices:
+- **Django templates with inline CSS** over SPA/React — no build tooling needed, consistent with existing report HTML pattern
+- **CDN-loaded libraries** (Chart.js 4.x, Alpine.js 3.x, HTMX 1.9.x) — zero npm/node dependencies
+- **Custom CSS classes** in base.html reusing styles.css variables — dark theme with cyan accents matching report styling
+- **HTMX polling every 2s** for scan status updates — simplest approach, no SSE/WebSocket needed
+- **--dashboard flag defaults to enabled** — maximizes usability for demos/enterprise
+- **save_scan() added to _run_scan_in_thread** — critical fix: API scans now persist to SQLite history
+- **5 new ScanHistory query methods** supporting dashboard aggregation needs
+- **Tests skip gracefully** when Django is not installed — no false failures in minimal environments
+
+### Alternatives considered
+- React/Vue SPA with API backend (rejected: adds build complexity, npm deps, separate deployment)
+- Server-Sent Events for real-time updates (rejected: HTMX polling simpler, no new middleware)
+- Bootstrap/Tailwind CDN (rejected: custom inline CSS matches existing report pattern, smaller footprint)
+
+### Results
+- 17 new files created, 5 files modified
+- 28 tests (18 pass, 10 skip without Django)
+- Dashboard serves 7 pages + 3 HTMX partials
+- No new Python dependencies
+
+### Notes
+- Detailed plan with file-by-file specs and CSS variable references was highly effective
+- Phase ordering (data layer → Django config → templates → tests) prevented import issues
+- Parallel template creation by subagents needed manual CSS class alignment with base.html
+
+---
+
 ## 2026-02-22 — v1.4.0 Implementation
 
 ### What was asked
@@ -135,3 +169,22 @@ Implemented the full v1.5.0 plan with these architectural choices:
 - Parallel agent creation via background tasks + direct implementation was effective
 - All agents follow consistent BaseAgent contract — the pattern scales well to 34 agents
 - Policy engine exit codes (0=pass, 1=fail, 2=warn) map directly to CI/CD pass/fail
+
+---
+
+## 2026-02-23 — v1.5.0 Release
+
+### What was asked
+Complete the v1.5.0 release: README update, git commit, tag, push, GitHub release.
+
+### Decision made
+1. **Git commit** `0fd2305` — 34 files changed, 6899 insertions
+2. **Git tag** `v1.5.0` annotated tag
+3. **Git rebase** resolved branch divergence (local `0f58a9a` vs remote `a56ee92` — duplicate v1.4.0 commits from /tmp clone workaround). Rebase skipped the duplicate and cleanly applied v1.5.0 on top.
+4. **Git push** succeeded without SIGBUS (the rebase fixed the pack-objects issue by aligning history)
+5. **GitHub Release** created at https://github.com/fboiero/AiSec/releases/tag/v1.5.0
+
+### Notes
+- Stale `.git/index.lock` had to be removed before staging (leftover from previous session)
+- The v1.4.0 tag push was rejected (already exists on remote) — expected, no action needed
+- Rebase was the clean solution for the diverged history; no force push required

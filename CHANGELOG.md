@@ -5,6 +5,31 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-23
+
+### Added
+- **Web UI Dashboard** (`src/aisec/dashboard/`) -- Interactive web interface served at `/dashboard/` when running `aisec serve`. Features include:
+  - Home page with summary cards, severity distribution donut chart (Chart.js), findings trend line chart, and recent scans table
+  - Paginated/filterable scan list with HTMX partial reload
+  - Detailed scan view with Alpine.js tabbed interface (Summary, Findings, By Agent, Compliance tabs)
+  - Global findings explorer with severity/agent/framework/status filters and HTMX-powered updates
+  - Time-series trend charts showing findings over time, risk scores, and per-target breakdowns
+  - Policy management page displaying built-in (strict/moderate/permissive) and saved policies
+  - Scan submission form with agent selection, language choice, and Docker image autocomplete
+  - Real-time scan status polling via HTMX partials (2-second intervals)
+  - Dark theme using existing CSS variables from report templates
+  - CDN-loaded Chart.js 4.x, Alpine.js 3.x, and HTMX 1.9.x (no new Python dependencies)
+- `--dashboard/--no-dashboard` flag for `aisec serve` command (enabled by default)
+- **5 new ScanHistory query methods**: `severity_distribution()`, `search_findings()`, `global_trend()`, `distinct_targets()`, `count_scans()`
+- Automatic SQLite persistence of scan results in `_run_scan_in_thread()` (API scans now saved to history)
+- Django TEMPLATES configuration and CSRF middleware support for dashboard views
+- Dashboard context processor providing version, navigation, and active scan count to all templates
+- 25 new tests in `test_web_dashboard.py` covering URL resolution, ScanHistory methods, context processors, and imports
+
+### Changed
+- Version bumped to 1.6.0.
+- `serve.py` updated with dashboard URL routing, template configuration, and save_scan integration.
+
 ## [1.5.0] - 2026-02-23
 
 ### Added

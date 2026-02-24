@@ -1,0 +1,142 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Trends{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Trends</h1>
+</div>
+
+<!-- Global Findings Over Time -->
+<div class="card">
+    <div class="card-header"><h3>Global Findings Over Time</h3></div>
+    <div class="chart-container">
+        <canvas id="globalTrendChart"></canvas>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Risk Score Over Time -->
+    <div class="card">
+        <div class="card-header"><h3>Average Risk Score</h3></div>
+        <div class="chart-container">
+            <canvas id="riskScoreChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Per-Target Trend -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Per-Target Trend</h3>
+            <select class="form-select" id="target-select" style="width:auto;min-width:200px">
+                {% for t in targets %}
+                <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="chart-container">
+            <canvas id="targetTrendChart"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sevColors = {
+        critical: '#dc3545', high: '#fd7e14', medium: '#ffc107',
+        low: '#28a745', info: '#17a2b8'
+    };
+    const trendData = JSON.parse('{{ trend_data|safe }}');
+    const targetTrends = JSON.parse('{{ target_trends|safe }}');
+
+    // Global stacked area
+    if (trendData.length > 0) {
+        new Chart(document.getElementById('globalTrendChart'), {
+            type: 'line',
+            data: {
+                labels: trendData.map(d => d.scan_date),
+                datasets: ['critical','high','medium','low','info'].map(sev => ({
+                    label: sev.charAt(0).toUpperCase() + sev.slice(1),
+                    data: trendData.map(d => d[sev + '_count'] || 0),
+                    borderColor: sevColors[sev],
+                    backgroundColor: sevColors[sev] + '44',
+                    fill: true, tension: 0.3, pointRadius: 2
+                }))
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } },
+                    y: { stacked: true, ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } }
+                },
+                plugins: { legend: { labels: { color: '#e0e0e0' } } }
+            }
+        });
+    }
+
+    // Risk score line
+    if (trendData.length > 0) {
+        new Chart(document.getElementById('riskScoreChart'), {
+            type: 'line',
+            data: {
+                labels: trendData.map(d => d.scan_date),
+                datasets: [{
+                    label: 'Avg Risk Score',
+                    data: trendData.map(d => d.avg_risk_score || 0),
+                    borderColor: '#6f42c1',
+                    backgroundColor: '#6f42c122',
+                    fill: true, tension: 0.3, pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } },
+                    y: { max: 10, ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } }
+                },
+                plugins: { legend: { labels: { color: '#e0e0e0' } } }
+            }
+        });
+    }
+
+    // Per-target chart
+    let targetChart = null;
+    const targetSelect = document.getElementById('target-select');
+
+    function renderTargetChart(target) {
+        const data = targetTrends[target] || [];
+        if (targetChart) targetChart.destroy();
+        if (data.length === 0) return;
+
+        targetChart = new Chart(document.getElementById('targetTrendChart'), {
+            type: 'line',
+            data: {
+                labels: data.map(d => d.started_at ? d.started_at.substring(0,10) : ''),
+                datasets: ['critical','high','medium','low'].map(sev => ({
+                    label: sev.charAt(0).toUpperCase() + sev.slice(1),
+                    data: data.map(d => d[sev + '_count'] || 0),
+                    borderColor: sevColors[sev],
+                    fill: false, tension: 0.3, pointRadius: 3
+                }))
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } },
+                    y: { ticks: { color: '#a0a0b0' }, grid: { color: '#2a2a4a' } }
+                },
+                plugins: { legend: { labels: { color: '#e0e0e0' } } }
+            }
+        });
+    }
+
+    if (targetSelect && targetSelect.options.length > 0) {
+        renderTargetChart(targetSelect.value);
+        targetSelect.addEventListener('change', function() { renderTargetChart(this.value); });
+    }
+});
+</script>
+{% endblock %}

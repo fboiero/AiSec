@@ -1,0 +1,80 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Policies{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Policies</h1>
+</div>
+
+<!-- Built-in Policies -->
+<h2 class="mb-2">Built-in Policies</h2>
+<div class="grid-3 mb-3">
+    {% for p in builtin_policies %}
+    <div class="card" style="border-left:3px solid {% if p.name == 'strict' %}var(--severity-critical){% elif p.name == 'moderate' %}var(--severity-medium){% else %}var(--severity-low){% endif %}">
+        <div class="card-header">
+            <h3>
+                <span class="badge {% if p.name == 'strict' %}badge-critical{% elif p.name == 'moderate' %}badge-medium{% else %}badge-low{% endif %}">
+                    {{ p.name|capfirst }}
+                </span>
+            </h3>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-2">{{ p.description }}</p>
+            {% if p.gate_block_count is not None %}
+            <div class="text-small mb-1">
+                <span class="text-critical">Block rules:</span> {{ p.gate_block_count }}
+                &nbsp;&middot;&nbsp;
+                <span class="text-medium">Warn rules:</span> {{ p.gate_warn_count }}
+            </div>
+            {% endif %}
+            {% if p.max_critical is not None %}
+            <div class="text-small mb-1">
+                Max critical: <strong>{% if p.max_critical == -1 %}unlimited{% else %}{{ p.max_critical }}{% endif %}</strong>
+                &nbsp;&middot;&nbsp;
+                Max high: <strong>{% if p.max_high == -1 %}unlimited{% else %}{{ p.max_high }}{% endif %}</strong>
+            </div>
+            {% endif %}
+            {% if p.required_agents %}
+            <div class="text-small text-muted">
+                Required agents: {{ p.required_agents|length }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Saved Policies -->
+<h2 class="mb-2">Saved Policies</h2>
+{% if saved_policies %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Created</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in saved_policies %}
+            <tr>
+                <td><strong>{{ p.name }}</strong></td>
+                <td class="text-muted">{{ p.description|default:"-" }}</td>
+                <td class="text-muted">{{ p.created_at|truncatechars:16 }}</td>
+                <td class="text-muted">{{ p.updated_at|truncatechars:16 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center text-muted">
+        No saved policies. Use the API or CLI to create custom scan policies.
+    </div>
+</div>
+{% endif %}
+{% endblock %}

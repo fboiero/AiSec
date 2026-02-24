@@ -120,6 +120,15 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
         _scan_store[scan_id]["report"] = report_dict
         _scan_store[scan_id]["finding_count"] = report.executive_summary.total_findings
 
+        # Persist to SQLite history
+        try:
+            from aisec.core.history import ScanHistory
+            history = ScanHistory()
+            history.save_scan(report)
+            history.close()
+        except Exception as hist_exc:
+            logger.warning("Failed to save scan to history: %s", hist_exc)
+
         _dispatch_webhooks("scan.completed", {
             "scan_id": scan_id,
             "image": image,
@@ -194,6 +203,33 @@ def _configure_django() -> None:
     if throttle_classes:
         rest_config["DEFAULT_THROTTLE_CLASSES"] = throttle_classes
 
+    # ------------------------------------------------------------------
+    # Dashboard templates and middleware
+    # ------------------------------------------------------------------
+    dashboard_enabled = os.environ.get("_AISEC_DASHBOARD_ENABLED", "1") == "1"
+
+    middleware = ["aisec.cli.serve.CorsMiddleware"]
+    if dashboard_enabled:
+        middleware.append("django.middleware.csrf.CsrfViewMiddleware")
+
+    from pathlib import Path
+    dashboard_template_dir = str(Path(__file__).resolve().parent.parent / "dashboard" / "templates")
+
+    templates_config = [
+        {
+            "BACKEND": "django.template.backends.django.DjangoTemplates",
+            "DIRS": [dashboard_template_dir] if dashboard_enabled else [],
+            "APP_DIRS": False,
+            "OPTIONS": {
+                "context_processors": (
+                    ["aisec.dashboard.context_processors.dashboard_context"]
+                    if dashboard_enabled
+                    else []
+                ),
+            },
+        }
+    ]
+
     settings.configure(
         DEBUG=False,
         SECRET_KEY=os.environ.get("AISEC_SECRET_KEY", "aisec-dev-key-change-in-production"),
@@ -210,9 +246,8 @@ def _configure_django() -> None:
             }
         },
         REST_FRAMEWORK=rest_config,
-        MIDDLEWARE=[
-            "aisec.cli.serve.CorsMiddleware",
-        ],
+        MIDDLEWARE=middleware,
+        TEMPLATES=templates_config,
         ALLOWED_HOSTS=["*"],
         USE_TZ=True,
     )
@@ -730,10 +765,10 @@ def _get_views() -> dict[str, Any]:
 
 def _build_urlpatterns() -> list[Any]:
     """Build Django URL patterns for the API."""
-    from django.urls import path
+    from django.urls import include, path
 
     views = _get_views()
-    return [
+    patterns = [
         path("api/health/", views["health_check"], name="health"),
         path("api/scan/", views["create_scan"], name="create-scan"),
         path("api/scan/batch/", views["batch_scan"], name="batch-scan"),
@@ -743,6 +778,11 @@ def _build_urlpatterns() -> list[Any]:
         path("api/webhooks/", views["webhooks"], name="webhooks"),
         path("api/webhooks/<str:webhook_id>/", views["delete_webhook"], name="delete-webhook"),
     ]
+
+    if os.environ.get("_AISEC_DASHBOARD_ENABLED", "1") == "1":
+        patterns.append(path("dashboard/", include("aisec.dashboard.urls")))
+
+    return patterns
 
 
 # This is resolved by Django via ROOT_URLCONF = "aisec.cli.serve"
@@ -794,6 +834,7 @@ def serve(
     port: int = typer.Option(8000, "--port", "-p", help="Port number"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload (dev mode)"),
     workers: int = typer.Option(1, "--workers", "-w", help="Number of worker processes"),
+    dashboard: bool = typer.Option(True, "--dashboard/--no-dashboard", help="Enable web dashboard UI"),
 ) -> None:
     """Start the AiSec REST API server (Django REST Framework).
 
@@ -808,6 +849,8 @@ def serve(
       - GET/POST /api/webhooks/    -- Manage webhook notifications
       - DELETE /api/webhooks/{id}/ -- Remove a webhook
       - GET  /api/health/          -- Health check
+
+    When --dashboard is enabled (default), a web UI is served at /dashboard/.
 
     The browsable API is available at each endpoint in the browser.
 
@@ -830,6 +873,9 @@ def serve(
         )
         raise typer.Exit(code=1)
 
+    # Set dashboard flag before Django configuration
+    os.environ["_AISEC_DASHBOARD_ENABLED"] = "1" if dashboard else "0"
+
     _configure_django()
 
     console.print(
@@ -840,6 +886,11 @@ def serve(
     console.print(f"  Health:       http://{host}:{port}/api/health/")
     console.print(f"  Submit scan:  POST http://{host}:{port}/api/scan/")
     console.print(f"  List scans:   http://{host}:{port}/api/scans/")
+
+    if dashboard:
+        console.print(f"  [bold cyan]Dashboard:[/bold cyan]  http://{host}:{port}/dashboard/")
+    else:
+        console.print("  [dim]Dashboard:   Disabled (use --dashboard to enable)[/dim]")
 
     if os.environ.get("AISEC_API_KEY"):
         console.print("  [bold yellow]Auth:[/bold yellow]        API key required (X-API-Key header)")

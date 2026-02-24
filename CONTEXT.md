@@ -1,50 +1,45 @@
 # AiSec Session Context
 
 ## Current Goal
-v1.5.0 is **fully implemented and tested**. Pending: README update, git commit, tag, push, GitHub release.
+v1.6.0 is **implemented and tested** (pending commit/push/release).
 
 ## Plan
-v1.5.0 — Agentic Runtime Security, RAG/MCP Hardening & Auto-Remediation (delivered and tested).
+v1.6.0 — Web UI Dashboard (delivered, 17 new files, 5 modified, 28 tests).
 
 ## Completed
-- **6 new agents** created and registered (34 total):
-  - `rag_security` — RAG pipeline security (loaders, retrieval, context stuffing, injection, grounding)
-  - `mcp_security` — MCP server security (auth, schemas, transport, approval, path traversal)
-  - `tool_chain` — Tool chain security (sandbox, file/network/DB restrictions, output injection)
-  - `agent_memory` — Agent memory security (encryption, access control, poisoning, growth, serialization)
-  - `fine_tuning` — Fine-tuning pipeline security (data validation, PII, provenance, secrets, registry)
-  - `cicd_pipeline` — CI/CD pipeline security (secrets, model signing, pip safety, Docker privilege)
-- **Auto-Remediation Engine** (`src/aisec/remediation/`) with 16+ strategies, code patches, effort estimation
-- **Policy-as-Code Engine** (`src/aisec/policies/`) with 3 built-in policies (strict/moderate/permissive)
-- **8 new correlation rules** added (26 total) in `core/correlation.py`
-- **Registry** updated with 6 new agent imports (34 total)
-- **Version** bumped to 1.5.0 in `pyproject.toml` and `__init__.py`
-- **CHANGELOG.md** updated with v1.5.0 entry
-- **8 test files** created (154 new tests, 1098 total pass, 2 skipped)
+- **Dashboard package** (`src/aisec/dashboard/`) with views, urls, templates, context processors
+- **11 Django templates**: base.html (dark theme, sidebar nav, inline CSS), home (charts, cards), scans (paginated/filterable), scan_detail (tabbed Alpine.js), findings (HTMX-powered explorer), trends (Chart.js time-series), policies (built-in + saved), new_scan (form), 3 HTMX partials (scan_status, scan_table, finding_rows)
+- **10 view functions** in views.py (~280 lines): home, scan_list, scan_detail, findings_explorer, trends, policies, new_scan, partial_scan_table, partial_scan_status, partial_finding_rows
+- **5 new ScanHistory methods**: severity_distribution(), search_findings(), global_trend(), distinct_targets(), count_scans()
+- **serve.py** updated: --dashboard/--no-dashboard flag, TEMPLATES config, CSRF middleware, dashboard URL include, save_scan in _run_scan_in_thread
+- **CDN libraries**: Chart.js 4.x (charts), Alpine.js 3.x (reactivity), HTMX 1.9.x (partial updates)
+- **Version** bumped to 1.6.0 in pyproject.toml and __init__.py
+- **CHANGELOG.md** updated with v1.6.0 entry
+- **README.md** updated (Web UI Dashboard section, feature list, roadmap checkbox)
+- **test_web_dashboard.py** — 28 tests (18 pass, 10 skip when Django absent)
 
 ## Pending
-- **README.md** update (34 agents, new table rows, architecture diagram, roadmap)
-- **Git commit** with detailed message
-- **Git tag** v1.5.0
-- **Git push** to origin/main (may need `/tmp` clone workaround for SIGBUS)
-- **GitHub Release** with changelog
+- Git commit and push
+- GitHub release
 
 ## Key Decisions
-- RAG security as dedicated agent (not extension of embedding_leakage) — distinct attack surface
-- MCP security focused on server-side (tool schemas, auth, transport) — highest impact area
-- Tool chain agent covers function calling broadly (not just MCP) — LangChain, CrewAI, custom tools
-- Policy engine uses YAML not OPA/Rego — simpler, no new dependencies, fits AiSec patterns
-- Remediation engine generates static fix suggestions (no LLM-powered analysis) — deterministic, fast
-- 3 built-in policies map to deployment stages: strict=prod, moderate=staging, permissive=dev
+- Dashboard served at /dashboard/ via Django templates (not SPA/React) — no new build tooling
+- CDN-loaded JS libraries (Chart.js, Alpine.js, HTMX) — no npm/node dependencies
+- Inline CSS in base.html reusing styles.css variables — consistent with report pattern
+- HTMX polling every 2s for scan status — no SSE/WebSocket needed
+- All templates use custom CSS classes from base.html (not Bootstrap/Tailwind)
+- --dashboard flag defaults to enabled for immediate usability
+- save_scan() call added to _run_scan_in_thread to persist API scans to SQLite
 
 ## Relevant Paths
-- New agents: `src/aisec/agents/{rag_security,mcp_security,tool_chain,agent_memory,fine_tuning,cicd_pipeline}.py`
-- Remediation: `src/aisec/remediation/{engine,strategies,models}.py`
-- Policies: `src/aisec/policies/{engine,models,loader}.py`, `builtin/{strict,moderate,permissive}.yaml`
-- Correlation: `src/aisec/core/correlation.py`
-- Registry: `src/aisec/agents/registry.py`
-- Tests: `tests/unit/agents/test_{rag_security,mcp_security,tool_chain,agent_memory,fine_tuning,cicd_pipeline}_agent.py`, `tests/unit/test_{remediation,policy}_engine.py`
+- Dashboard: `src/aisec/dashboard/{__init__,views,urls,context_processors}.py`
+- Templates: `src/aisec/dashboard/templates/dashboard/{base,home,scans,scan_detail,findings,trends,policies,new_scan}.html`
+- Partials: `src/aisec/dashboard/templates/dashboard/partials/{scan_status,scan_table,finding_rows}.html`
+- History: `src/aisec/core/history.py` (5 new methods)
+- Serve: `src/aisec/cli/serve.py` (--dashboard, save_scan, URL routing)
+- Tests: `tests/unit/test_web_dashboard.py`
 
 ## Commands
 - Run tests: `PYTHONPATH=src python3 -m pytest tests/ -x -q`
-- Verify agents: `PYTHONPATH=src python3 -c "from aisec.agents.registry import default_registry, register_core_agents; register_core_agents(); print(len(default_registry.get_all()))"`
+- Run dashboard tests: `PYTHONPATH=src python3 -m pytest tests/unit/test_web_dashboard.py -x -q`
+- Import check: `PYTHONPATH=src python3 -c "from aisec.dashboard.views import home; print('OK')"`

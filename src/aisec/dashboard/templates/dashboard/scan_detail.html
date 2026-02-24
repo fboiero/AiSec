@@ -1,0 +1,232 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Scan {{ scan.scan_id|truncatechars:12 }}{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<div class="text-small text-muted mb-2">
+    <a href="/dashboard/scans/">Scans</a> &raquo; {{ scan.scan_id|truncatechars:12 }}
+</div>
+
+<div class="page-header">
+    <h1>
+        <span class="text-mono">{{ scan.target_image|default:scan.image }}</span>
+        {% if is_active %}
+        <div style="display:inline-block;margin-left:12px"
+             hx-get="/dashboard/partials/scan-status/{{ scan.scan_id }}/"
+             hx-trigger="every 2s" hx-swap="innerHTML">
+            <span class="badge badge-{{ scan.status }}">{{ scan.status }}</span>
+        </div>
+        {% endif %}
+    </h1>
+    {% if not is_active %}
+    <span class="badge badge-{{ scan.overall_risk_level|lower }}">{{ scan.overall_risk_level }}</span>
+    {% endif %}
+</div>
+
+{% if not is_active %}
+<!-- Scan Metadata -->
+<div class="d-flex gap-2 flex-wrap mb-3 text-small text-muted">
+    <span>Started: {{ scan.started_at|truncatechars:19 }}</span>
+    {% if scan.completed_at %}<span>Completed: {{ scan.completed_at|truncatechars:19 }}</span>{% endif %}
+    {% if scan.duration_seconds %}<span>Duration: {{ scan.duration_seconds|floatformat:0 }}s</span>{% endif %}
+    <span>ID: <span class="text-mono">{{ scan.scan_id }}</span></span>
+</div>
+
+<!-- Severity Cards -->
+<div class="stat-cards">
+    <div class="stat-card" style="border-left:3px solid var(--severity-critical)">
+        <div class="stat-value text-critical">{{ scan.critical_count }}</div>
+        <div class="stat-label">Critical</div>
+    </div>
+    <div class="stat-card" style="border-left:3px solid var(--severity-high)">
+        <div class="stat-value text-high">{{ scan.high_count }}</div>
+        <div class="stat-label">High</div>
+    </div>
+    <div class="stat-card" style="border-left:3px solid var(--severity-medium)">
+        <div class="stat-value text-medium">{{ scan.medium_count }}</div>
+        <div class="stat-label">Medium</div>
+    </div>
+    <div class="stat-card" style="border-left:3px solid var(--severity-low)">
+        <div class="stat-value text-low">{{ scan.low_count }}</div>
+        <div class="stat-label">Low</div>
+    </div>
+    <div class="stat-card" style="border-left:3px solid var(--severity-info)">
+        <div class="stat-value" style="color:var(--severity-info)">{{ scan.info_count }}</div>
+        <div class="stat-label">Info</div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div x-data="{ tab: 'summary' }">
+    <div class="tabs">
+        <button class="tab" :class="{ 'active': tab === 'summary' }" @click="tab = 'summary'">Summary</button>
+        <button class="tab" :class="{ 'active': tab === 'findings' }" @click="tab = 'findings'">
+            Findings <span class="tab-count">{{ findings|length }}</span>
+        </button>
+        <button class="tab" :class="{ 'active': tab === 'agents' }" @click="tab = 'agents'">
+            By Agent <span class="tab-count">{{ findings_by_agent|length }}</span>
+        </button>
+        <button class="tab" :class="{ 'active': tab === 'compliance' }" @click="tab = 'compliance'">Compliance</button>
+    </div>
+
+    <!-- Summary Tab -->
+    <div x-show="tab === 'summary'" x-cloak>
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header"><h3>Risk Scores</h3></div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <div class="d-flex justify-between mb-1">
+                            <span>AI Risk Score</span>
+                            <strong>{{ scan.ai_risk_score|floatformat:1 }} / 10</strong>
+                        </div>
+                        <div style="background:var(--border-color);border-radius:4px;height:8px;overflow:hidden">
+                            <div style="background:{% if scan.ai_risk_score >= 7 %}var(--severity-critical){% elif scan.ai_risk_score >= 4 %}var(--severity-medium){% else %}var(--severity-low){% endif %};height:100%;width:{{ scan.ai_risk_score|floatformat:0 }}0%;transition:width 0.3s"></div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-between mb-1">
+                            <span>Compliance Score</span>
+                            <strong>{{ scan.compliance_score|floatformat:1 }}%</strong>
+                        </div>
+                        <div style="background:var(--border-color);border-radius:4px;height:8px;overflow:hidden">
+                            <div style="background:{% if scan.compliance_score >= 80 %}var(--severity-low){% elif scan.compliance_score >= 60 %}var(--severity-medium){% else %}var(--severity-critical){% endif %};height:100%;width:{{ scan.compliance_score|floatformat:0 }}%;transition:width 0.3s"></div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-muted">Total Findings: <strong class="text-cyan">{{ scan.total_findings }}</strong></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3>Scan Info</h3></div>
+                <div class="card-body">
+                    {% if metadata.top_risks %}
+                    <h4 class="mb-1">Top Risks</h4>
+                    <ul style="padding-left:20px;margin-bottom:12px">
+                        {% for risk in metadata.top_risks %}
+                        <li class="text-muted">{{ risk }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    <div class="text-small text-muted">
+                        <div>Version: {{ scan.aisec_version }}</div>
+                        <div>Language: {{ scan.language }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Findings Tab -->
+    <div x-show="tab === 'findings'" x-cloak>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Severity</th>
+                        <th>Agent</th>
+                        <th>CVSS</th>
+                        <th>AI Risk</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in findings %}
+                    <tr>
+                        <td>{{ f.title }}</td>
+                        <td><span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+                        <td class="text-mono text-small">{{ f.agent }}</td>
+                        <td>{{ f.cvss_score|floatformat:1|default:"-" }}</td>
+                        <td>{{ f.ai_risk_score|floatformat:1|default:"-" }}</td>
+                        <td><span class="badge badge-{% if f.status == 'open' %}pending{% else %}completed{% endif %}">{{ f.status }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="table-empty">No findings</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- By Agent Tab -->
+    <div x-show="tab === 'agents'" x-cloak>
+        {% for agent_name, agent_findings in findings_by_agent.items %}
+        <div class="card" x-data="{ open: true }">
+            <div class="card-header" style="cursor:pointer" @click="open = !open">
+                <h3>{{ agent_name }} <span class="tab-count">{{ agent_findings|length }}</span></h3>
+                <span class="text-muted" x-text="open ? '&#9660;' : '&#9654;'"></span>
+            </div>
+            <div x-show="open" x-cloak>
+                <div class="table-container" style="border:none;margin:0">
+                    <table>
+                        <thead>
+                            <tr><th>Title</th><th>Severity</th><th>CVSS</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for f in agent_findings %}
+                            <tr>
+                                <td>{{ f.title }}</td>
+                                <td><span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+                                <td>{{ f.cvss_score|floatformat:1|default:"-" }}</td>
+                                <td>{{ f.status }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Compliance Tab -->
+    <div x-show="tab === 'compliance'" x-cloak>
+        <div class="card">
+            <div class="card-header"><h3>Compliance Score</h3></div>
+            <div class="card-body text-center">
+                <div style="font-size:3rem;font-weight:700;color:{% if scan.compliance_score >= 80 %}var(--severity-low){% elif scan.compliance_score >= 60 %}var(--severity-medium){% else %}var(--severity-critical){% endif %}">
+                    {{ scan.compliance_score|floatformat:1 }}%
+                </div>
+                <p class="text-muted mt-1">
+                    {% if scan.compliance_score >= 80 %}Good compliance posture
+                    {% elif scan.compliance_score >= 60 %}Moderate compliance — review recommended
+                    {% else %}Low compliance — immediate attention needed
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header"><h3>Severity Breakdown</h3></div>
+                <div class="card-body">
+                    <div class="d-flex justify-between mb-1"><span class="text-critical">Critical</span><strong>{{ scan.critical_count }}</strong></div>
+                    <div class="d-flex justify-between mb-1"><span class="text-high">High</span><strong>{{ scan.high_count }}</strong></div>
+                    <div class="d-flex justify-between mb-1"><span class="text-medium">Medium</span><strong>{{ scan.medium_count }}</strong></div>
+                    <div class="d-flex justify-between mb-1"><span class="text-low">Low</span><strong>{{ scan.low_count }}</strong></div>
+                    <div class="d-flex justify-between"><span style="color:var(--severity-info)">Info</span><strong>{{ scan.info_count }}</strong></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3>Risk Metrics</h3></div>
+                <div class="card-body">
+                    <div class="d-flex justify-between mb-1"><span>AI Risk Score</span><strong>{{ scan.ai_risk_score|floatformat:1 }}</strong></div>
+                    <div class="d-flex justify-between mb-1"><span>Total Findings</span><strong>{{ scan.total_findings }}</strong></div>
+                    <div class="d-flex justify-between"><span>Risk Level</span><strong>{{ scan.overall_risk_level }}</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Active scan view -->
+<div class="card">
+    <div class="card-body text-center">
+        <div class="spinner" style="width:32px;height:32px;margin:0 auto 12px"></div>
+        <p>Scan is {{ scan.status }}. Results will appear here when complete.</p>
+        <p class="text-small text-muted">Image: <span class="text-mono">{{ scan.image }}</span></p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
