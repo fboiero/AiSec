@@ -1,50 +1,52 @@
 # AiSec Session Context
 
-## Current Goal
-v1.7.0 implementation complete — ready for commit and release.
+## Current State
+- **Version**: 1.8.0 (committed `2675882`, pushed to main)
+- **Branch**: main
+- **All tests**: 1,378 passed, 10 skipped
 
-## Plan
-v1.7.0 — Cloud Deployment & Falco Runtime Monitoring (25 new files, 11 modified, ~61 tests).
+## What Was Completed in v1.8.0
 
-## Completed
-- **Cloud Deployment**: 7 K8s manifests, Helm chart (5 files), docker-compose.prod.yml, deploy/README.md
-- **Cloud Storage Module** (`src/aisec/core/cloud_storage.py`): S3, GCS, Azure Blob backends with factory function
-- **Falco Runtime Agent** (`falco_runtime`, 35th agent): eBPF sidecar deployment, alert parsing, 9 custom AI/ML rules
-- **Falco Alert Parser** (`src/aisec/agents/falco_alert_parser.py`): JSON parsing, OWASP mapping, severity mapping
-- **DockerManager.deploy_sidecar()**: Generic sidecar deployment with PID namespace sharing
-- **5 new correlation rules** (31 total): Falco + network/permissions/dataflow/resource_exhaustion
-- **5 new AiSecConfig fields**: cloud_storage_backend, cloud_storage_bucket, cloud_storage_prefix, falco_enabled, falco_image
-- **`--cloud-storage` CLI flag** on `aisec scan` for automatic report upload
-- **`[cloud]` extras group** in pyproject.toml (boto3, google-cloud-storage, azure-storage-blob)
-- **Version bumped** to 1.7.0 in __init__.py and pyproject.toml
-- **CHANGELOG.md** updated with v1.7.0 entry
-- **README.md** updated: 35 agents, 31 rules, Layer 5 architecture, cloud/Falco sections, roadmap checkboxes
-- **5 test files** (~61 tests): cloud_storage, falco_agent, alert_parser, deploy_manifests, correlation_v17
-- **All 1346 tests pass** (12 skipped — Django-related)
+### New Files (6)
+1. `src/aisec/core/metrics.py` — Prometheus counters/gauges/histograms with no-op fallback
+2. `src/aisec/core/scheduler.py` — APScheduler ScanScheduler with cron + aliases
+3. `.dockerignore` — Excludes .git, tests, __pycache__, .github, docs, .claude, deploy
+4. `tests/unit/test_metrics.py` — 11 tests
+5. `tests/unit/test_scheduler.py` — 13 tests
+6. `tests/unit/test_structured_logging.py` — 8 tests
+
+### Modified Files (10)
+1. `src/aisec/utils/logging.py` — Rewritten with structlog (JSON/console, bind_context)
+2. `src/aisec/cli/serve.py` — /api/metrics/, /api/schedules/ endpoints, --schedule flags, request ID middleware
+3. `src/aisec/cli/scan.py` — Scan/agent/finding metrics instrumentation
+4. `src/aisec/core/config.py` — log_format, schedule_cron, schedule_image fields
+5. `src/aisec/__init__.py` — Version 1.8.0
+6. `pyproject.toml` — [metrics], [scheduler] extras in [all]
+7. `CHANGELOG.md` — v1.8.0 entry
+8. `README.md` — Observability, logging, scheduler sections + Layer 6 architecture
+9. `DECISIONS.md` — v1.8.0 decision entry
+10. `tests/unit/test_web_dashboard.py` — Version test updated
 
 ## Pending
-- Git commit, tag, push, GitHub release for v1.7.0
+- Nothing pending — v1.8.0 is released
 
 ## Key Decisions
-- Cloud storage backends use optional SDK imports (boto3, google-cloud-storage, azure-storage-blob) — graceful ImportError
-- Falco uses falco-no-driver image (eBPF userspace) — no kernel module required
-- Falco sidecar shares PID namespace with target container for syscall visibility
-- deploy_sidecar() is generic (not Falco-specific) for future sidecar use cases
-- K8s manifests are raw YAML (no Kustomize) for maximum simplicity
+- prometheus_client as optional [metrics] extra with no-op fallback
+- APScheduler 3.x BackgroundScheduler (thread-based, matches Django sync model)
+- structlog activated (was already in dependencies but unused)
+- Request ID tracing via CorsMiddleware (no separate middleware)
 
-## Relevant Paths
-- Cloud storage: `src/aisec/core/cloud_storage.py`
-- Falco agent: `src/aisec/agents/falco_runtime.py`
-- Alert parser: `src/aisec/agents/falco_alert_parser.py`
-- Falco rules: `src/aisec/agents/falco_rules.yaml`
-- Config: `src/aisec/core/config.py` (5 new fields)
-- Docker manager: `src/aisec/docker_/manager.py` (deploy_sidecar)
-- Scan CLI: `src/aisec/cli/scan.py` (--cloud-storage flag)
-- K8s manifests: `deploy/kubernetes/`
-- Helm chart: `deploy/helm/aisec/`
-- Docker Compose: `deploy/docker-compose.prod.yml`
-- Tests: `tests/unit/test_cloud_storage.py`, `tests/unit/agents/test_falco_runtime_agent.py`, `tests/unit/test_falco_alert_parser.py`, `tests/unit/test_deploy_manifests.py`, `tests/unit/test_correlation_v17.py`
+## Known Issues
+- `git status`/`git diff`/`git commit` can hang in this repo — workaround: use low-level git plumbing (write-tree, commit-tree, update-ref)
+
+## Key Paths
+- Metrics: `src/aisec/core/metrics.py`
+- Scheduler: `src/aisec/core/scheduler.py`
+- Logging: `src/aisec/utils/logging.py`
+- Serve: `src/aisec/cli/serve.py`
+- Config: `src/aisec/core/config.py`
 
 ## Commands
-- Run tests: `PYTHONPATH=src python3 -m pytest tests/ -x -q`
-- Import check: `PYTHONPATH=src python3 -c "from aisec.agents.falco_runtime import FalcoRuntimeAgent; print('OK')"`
+- Run tests: `PYTHONPATH=src python3 -m pytest tests/unit/ -x -q`
+- Metrics check: `PYTHONPATH=src python3 -c "from aisec.core.metrics import get_metrics_text; print('OK')"`
+- Scheduler check: `PYTHONPATH=src python3 -c "from aisec.core.scheduler import ScanScheduler; print('OK')"`
