@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +18,12 @@ from aisec.cli.console import console
 from aisec.core.config import AiSecConfig
 from aisec.core.context import ScanContext
 from aisec.core.enums import Severity
+from aisec.core.metrics import (
+    record_scan_start,
+    record_scan_complete,
+    record_finding,
+    record_agent_duration,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +148,8 @@ async def _run_scan(
     console.print(f"[info]Scanning [bold]{image}[/bold] with {agent_count} agents...[/info]")
 
     # ── Phase 3: Run orchestrator ────────────────────────────────────
+    record_scan_start()
+    _scan_start = time.monotonic()
     orchestrator = OrchestratorAgent(ctx, registry)
 
     # Track progress via events
@@ -158,7 +167,12 @@ async def _run_scan(
             nonlocal completed_count
             completed_count += 1
             agent_name = getattr(result, "agent", "unknown")
-            finding_count = len(getattr(result, "findings", []))
+            findings = getattr(result, "findings", [])
+            finding_count = len(findings)
+            duration = getattr(result, "duration_seconds", 0.0)
+            record_agent_duration(agent_name, duration)
+            for f in findings:
+                record_finding(getattr(f, "severity", "unknown").value if hasattr(getattr(f, "severity", None), "value") else str(getattr(f, "severity", "unknown")))
             progress.update(
                 scan_task,
                 advance=1,
@@ -167,11 +181,15 @@ async def _run_scan(
 
         ctx.event_bus.on("agent.completed", _on_agent_complete)
 
+        scan_failed = False
         try:
             await orchestrator.run_scan()
         except Exception as exc:
+            scan_failed = True
             console.print(f"[error]Scan error: {exc}[/error]")
             logger.exception("Scan failed")
+        finally:
+            record_scan_complete(time.monotonic() - _scan_start, failed=scan_failed)
 
     # ── Phase 4: Build report ────────────────────────────────────────
     console.print("[info]Building report...[/info]")
@@ -291,15 +309,21 @@ async def _run_scan_with_dashboard(
     agent_count = len(registry.get_enabled(config))
 
     # ── Phase 3: Run orchestrator (with dashboard) ───────────────────
+    record_scan_start()
+    _scan_start = time.monotonic()
     orchestrator = OrchestratorAgent(ctx, registry)
 
+    scan_failed = False
     async with ScanDashboard(ctx) as dashboard:
         dashboard.set_agent_count(agent_count)
         try:
             await orchestrator.run_scan()
         except Exception as exc:
+            scan_failed = True
             console.print(f"[error]Scan error: {exc}[/error]")
             logger.exception("Scan failed")
+        finally:
+            record_scan_complete(time.monotonic() - _scan_start, failed=scan_failed)
 
     # ── Phase 4: Build report ────────────────────────────────────────
     console.print("[info]Building report...[/info]")

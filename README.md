@@ -39,6 +39,12 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 - **Cloud Deployment** - Kubernetes manifests, Helm chart, Docker Compose for AWS/GCP/Azure production deployment
 - **Cloud Storage** - Upload reports to S3, GCS, or Azure Blob Storage (`--cloud-storage` flag)
 - **Falco Runtime Monitoring** - eBPF-based syscall monitoring via Falco sidecar with 9 AI-specific detection rules
+- **Prometheus Metrics** - `/api/metrics/` endpoint with counters, gauges, and histograms for scans, findings, agents, and API requests
+- **Structured Logging** - structlog-based JSON logging with request ID tracing (`AISEC_LOG_FORMAT=json`)
+- **Scan Scheduler** - Cron-based recurring scans via APScheduler (`--schedule "0 2 * * *"`)
+- **Prometheus Observability** - `/api/metrics/` endpoint with counters, gauges, and histograms for scans, findings, agents, and API requests
+- **Structured JSON Logging** - structlog-based logging with JSON output, request ID tracing, and context binding
+- **Scheduled Scans** - APScheduler-based cron scheduling via CLI (`--schedule`) or API (`/api/schedules/`)
 - **REST API** - `aisec serve` with Django REST Framework for programmatic access
 - **GitHub Action** - Marketplace action with SARIF upload for automated security scanning in CI/CD
 - **Scan History** - SQLite-backed trending and baseline comparison for tracking security posture over time
@@ -85,6 +91,16 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
   │  FalcoRuntime (eBPF sidecar)  CloudStorage (S3/GCS/Azure)   │
   │  [K8s Manifests]  [Helm Chart]  [Docker Compose]             │
   └───────────────────────────────────────────────────────────────┘
+                                   |
+  ┌──────── Layer 6: Observability & Scheduling (v1.8) ─────────┐
+  │  Prometheus Metrics (/api/metrics/)  Structlog JSON Logging  │
+  │  APScheduler Cron Scans  Request ID Tracing                  │
+  └───────────────────────────────────────────────────────────────┘
+                                   |
+  ┌──── Layer 6: Observability & Scheduling (v1.8) ────────────┐
+  │  Prometheus Metrics   Structlog JSON Logging                │
+  │  APScheduler Cron     Request ID Tracing                    │
+  └─────────────────────────────────────────────────────────────┘
                                    |
                           +--------v---------+
                           |  Docker Sandbox   |
@@ -162,6 +178,18 @@ pip install "aisec[deptree]"
 
 # Install with cloud storage support (S3, GCS, Azure)
 pip install "aisec[cloud]"
+
+# Install with Prometheus metrics
+pip install "aisec[metrics]"
+
+# Install with scan scheduler
+pip install "aisec[scheduler]"
+
+# Install with Prometheus metrics
+pip install "aisec[metrics]"
+
+# Install with scan scheduler
+pip install "aisec[scheduler]"
 
 # Install with REST API server
 pip install "aisec[api]"
@@ -281,6 +309,106 @@ AISEC_FALCO_ENABLED=true aisec scan run myagent:latest
 
 # Falco detects: model tampering, crypto mining, container escape,
 # DNS exfiltration, reverse shells, and more
+```
+
+### Observability (Prometheus Metrics)
+
+```bash
+# Install metrics support
+pip install "aisec[metrics]"
+
+# Start API server — metrics available at /api/metrics/
+aisec serve --port 8000
+
+# Scrape metrics with Prometheus
+# curl http://localhost:8000/api/metrics/
+
+# Exposed metrics:
+# aisec_scans_total, aisec_scans_active, aisec_scan_duration_seconds
+# aisec_findings_total (by severity), aisec_agent_duration_seconds (by agent)
+# aisec_api_requests_total, aisec_api_request_duration_seconds
+
+# Enable JSON structured logging
+AISEC_LOG_FORMAT=json aisec serve
+# or: AISEC_LOG_JSON=true aisec serve
+```
+
+### Scheduled Scans
+
+```bash
+# Install scheduler support
+pip install "aisec[scheduler]"
+
+# Start API server with a recurring scan (daily at 2am)
+aisec serve --schedule "0 2 * * *" --schedule-image myapp:latest
+
+# Cron shorthands: @hourly, @daily, @weekly, @monthly
+aisec serve --schedule @daily --schedule-image myapp:latest
+
+# Manage schedules via API
+curl -X POST http://localhost:8000/api/schedules/ \
+  -H "Content-Type: application/json" \
+  -d '{"image": "myapp:latest", "cron": "@daily"}'
+
+curl http://localhost:8000/api/schedules/
+curl -X DELETE http://localhost:8000/api/schedules/<schedule-id>/
+```
+
+### Observability (Prometheus Metrics)
+
+```bash
+# Install metrics dependency
+pip install "aisec[metrics]"
+
+# Start the API server — metrics are exposed at /api/metrics/
+aisec serve --port 8000
+
+# Scrape metrics (Prometheus text format)
+curl http://localhost:8000/api/metrics/
+
+# Available metrics:
+#   aisec_scans_total{status}          — total scans started/completed/failed
+#   aisec_scans_active                 — currently running scans
+#   aisec_scan_duration_seconds        — scan duration histogram
+#   aisec_findings_total{severity}     — findings by severity
+#   aisec_agent_duration_seconds{agent} — per-agent execution time
+#   aisec_api_requests_total{method,endpoint,status} — API request counter
+#   aisec_api_request_duration_seconds — API request latency histogram
+```
+
+### Structured JSON Logging
+
+```bash
+# Enable JSON log output
+AISEC_LOG_FORMAT=json aisec serve
+
+# Or use the boolean flag
+AISEC_LOG_JSON=true aisec serve
+
+# Default: human-readable console output (structlog ConsoleRenderer)
+# JSON output includes: timestamp, log level, logger name, event, request_id
+```
+
+### Scheduled Scans
+
+```bash
+# Start server with a recurring scan schedule (daily at 2am)
+aisec serve --schedule "0 2 * * *" --schedule-image myapp:latest
+
+# Use cron aliases
+aisec serve --schedule @daily --schedule-image myapp:latest
+aisec serve --schedule @hourly --schedule-image myapp:latest
+
+# Manage schedules via API
+curl -X POST http://localhost:8000/api/schedules/ \
+  -H "Content-Type: application/json" \
+  -d '{"image": "myapp:latest", "cron": "0 2 * * *"}'
+
+curl http://localhost:8000/api/schedules/
+curl -X DELETE http://localhost:8000/api/schedules/<schedule-id>/
+
+# Install scheduler dependency
+pip install "aisec[scheduler]"
 ```
 
 ### REST API
@@ -484,6 +612,12 @@ mypy src/aisec/
 - [x] Cloud deployment (AWS, GCP, Azure) — K8s manifests, Helm chart, Docker Compose, cloud storage (S3/GCS/Azure)
 - [x] Real-time runtime monitoring (Falco eBPF sidecar with 9 AI-specific rules)
 - [x] Web UI dashboard (Chart.js, Alpine.js, HTMX)
+- [x] Prometheus observability (`/api/metrics/` endpoint, counters, gauges, histograms)
+- [x] Structured JSON logging (structlog, request ID tracing)
+- [x] Scheduled scans (APScheduler cron, API + CLI support)
+- [x] Prometheus metrics endpoint with counters, gauges, and histograms
+- [x] Structured JSON logging with structlog and request ID tracing
+- [x] Scan scheduler with APScheduler cron support
 
 ## Contributing
 

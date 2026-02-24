@@ -1,5 +1,29 @@
 # AiSec Decision Log
 
+## 2026-02-24 — v1.8.0 Observability, Scheduled Scans & Production Hardening
+
+### What was asked
+Implement v1.8.0 with Prometheus metrics, structured JSON logging (structlog), APScheduler-based scan scheduling, and .dockerignore.
+
+### Decisions made
+1. **Prometheus metrics as optional dependency** — `prometheus_client` in `[metrics]` extras with no-op fallback when not installed. Avoids forcing heavy dep on all users.
+2. **structlog over stdlib** — structlog was already in dependencies but unused. Activated it with JSON/console renderer toggle via `AISEC_LOG_FORMAT` env var. Backward-compatible `setup_logging("INFO")` call preserved.
+3. **APScheduler 3.x** — Chose BackgroundScheduler (thread-based) over AsyncIOScheduler to match Django's sync model. Added `[scheduler]` extras group.
+4. **Request ID tracing** — Injected into CorsMiddleware (already a required middleware) rather than adding a separate middleware class.
+5. **serve.py already had partial changes** — Previous session had started the metrics/scheduler integration. Completed remaining pieces (scheduler module, tests, docs).
+
+### Alternatives considered
+- **OpenTelemetry** instead of Prometheus — heavier, more complex setup. Prometheus is the standard for `/metrics` endpoints.
+- **Celery** instead of APScheduler — too heavyweight for simple cron scheduling; APScheduler is lighter and doesn't need Redis/RabbitMQ.
+
+### Results
+- 7 new files created, 8 files modified
+- 1378 unit tests passing, 10 skipped
+- New modules: `core/metrics.py`, `core/scheduler.py`, updated `utils/logging.py`
+- `.dockerignore` added for optimized Docker builds
+
+---
+
 ## 2026-02-24 — v1.7.0 Cloud Deployment & Falco Runtime Monitoring
 
 ### What was asked

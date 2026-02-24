@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aisec"
-version = "1.7.0"
+version = "1.8.0"
 description = "Deep security analysis framework for autonomous AI agent implementations"
 readme = "README.md"
 license = "Apache-2.0"
@@ -66,7 +66,9 @@ iac = ["checkov>=3.0.0"]
 nuclei = []  # External binary, not pip-installable
 deptree = ["pipdeptree>=2.0.0", "pip-licenses>=4.0.0"]
 cloud = ["boto3>=1.34.0", "google-cloud-storage>=2.14.0", "azure-storage-blob>=12.19.0"]
-all = ["aisec[pdf,network,secrets,crypto,pii,garak,modelscan,adversarial,api,static,audit,iac,deptree,cloud]"]
+metrics = ["prometheus_client>=0.20.0"]
+scheduler = ["apscheduler>=3.10.0"]
+all = ["aisec[pdf,network,secrets,crypto,pii,garak,modelscan,adversarial,api,static,audit,iac,deptree,cloud,metrics,scheduler]"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",

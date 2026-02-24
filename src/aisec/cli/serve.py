@@ -24,6 +24,14 @@ from typing import Any
 import typer
 
 from aisec.cli.console import console
+from aisec.core.metrics import (
+    record_api_request,
+    record_finding,
+    record_scan_start,
+    record_scan_complete,
+    get_metrics_text,
+)
+from aisec.utils.logging import bind_context, clear_context
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +45,9 @@ serve_app = typer.Typer(help="Start the AiSec REST API server.")
 _scan_store: dict[str, dict[str, Any]] = {}
 _webhook_store: dict[str, dict[str, Any]] = {}
 _start_time = datetime.now(timezone.utc)
+
+# Scheduler singleton (initialised in serve() when --schedule is provided)
+_scheduler_instance: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +98,8 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
 
     _scan_store[scan_id]["status"] = "running"
     _scan_store[scan_id]["started_at"] = datetime.now(timezone.utc).isoformat()
+    record_scan_start()
+    _scan_start = time.monotonic()
 
     try:
         config = AiSecConfig(
@@ -120,6 +133,15 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
         _scan_store[scan_id]["report"] = report_dict
         _scan_store[scan_id]["finding_count"] = report.executive_summary.total_findings
 
+        record_scan_complete(time.monotonic() - _scan_start)
+
+        # Record per-finding metrics
+        for section in getattr(report, "agent_reports", []):
+            for finding in getattr(section, "findings", []):
+                sev = getattr(finding, "severity", None)
+                if sev:
+                    record_finding(str(sev.value) if hasattr(sev, "value") else str(sev))
+
         # Persist to SQLite history
         try:
             from aisec.core.history import ScanHistory
@@ -143,6 +165,7 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
         _scan_store[scan_id]["status"] = "failed"
         _scan_store[scan_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
         _scan_store[scan_id]["error"] = str(exc)
+        record_scan_complete(time.monotonic() - _scan_start, failed=True)
 
         _dispatch_webhooks("scan.failed", {
             "scan_id": scan_id,
@@ -392,16 +415,28 @@ def _get_throttle() -> SimpleRateThrottle:
 # ---------------------------------------------------------------------------
 
 class CorsMiddleware:
-    """Minimal CORS middleware that allows all origins."""
+    """Minimal CORS middleware that allows all origins.
+
+    Also injects a request ID into structlog context and records
+    API request metrics.
+    """
 
     def __init__(self, get_response: Any) -> None:
         self.get_response = get_response
 
     def __call__(self, request: Any) -> Any:
+        # Inject request ID for structured logging traceability
+        request_id = request.META.get("HTTP_X_REQUEST_ID") or str(uuid.uuid4())[:8]
+        bind_context(request_id=request_id)
+
+        req_start = time.monotonic()
         response = self.get_response(request)
+        req_duration = time.monotonic() - req_start
+
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key, X-Request-ID"
+        response["X-Request-ID"] = request_id
 
         # Inject rate-limit headers.
         throttle = _get_throttle()
@@ -409,9 +444,15 @@ class CorsMiddleware:
         response["X-RateLimit-Limit"] = str(limit)
         response["X-RateLimit-Remaining"] = str(remaining)
 
+        # Record API metrics
+        endpoint = request.path
+        record_api_request(request.method, endpoint, response.status_code, req_duration)
+
         if request.method == "OPTIONS":
             response.status_code = 200
             response.content = b""
+
+        clear_context()
         return response
 
 
@@ -747,6 +788,100 @@ def _get_views() -> dict[str, Any]:
             status=status.HTTP_201_CREATED,
         )
 
+    # -- Prometheus metrics endpoint ------------------------------------------
+
+    @api_view(["GET"])
+    def metrics_view(request: Any) -> Response:
+        """Expose Prometheus-format metrics at /api/metrics/."""
+        from django.http import HttpResponse
+
+        body, content_type = get_metrics_text()
+        return HttpResponse(body, content_type=content_type)
+
+    # -- Scan schedule management views ----------------------------------------
+
+    @api_view(["GET", "POST"])
+    def schedules(request: Any) -> Response:
+        """Manage scheduled scans.
+
+        POST: Create a new scan schedule (cron-based).
+        GET: List all active schedules.
+        """
+        global _scheduler_instance
+
+        if request.method == "POST":
+            data = request.data
+            image = data.get("image")
+            cron = data.get("cron")
+            if not image or not cron:
+                return Response(
+                    {"detail": "Both 'image' and 'cron' fields are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Lazy-init the scheduler
+            if _scheduler_instance is None:
+                try:
+                    from aisec.core.scheduler import ScanScheduler
+
+                    def _scheduled_scan_callback(image: str, agents: list[str], language: str) -> None:
+                        scan_id = str(uuid.uuid4())
+                        _scan_store[scan_id] = {
+                            "scan_id": scan_id,
+                            "status": "pending",
+                            "image": image,
+                            "started_at": None,
+                            "completed_at": None,
+                            "finding_count": 0,
+                            "report": None,
+                            "error": None,
+                        }
+                        t = threading.Thread(
+                            target=_run_scan_in_thread,
+                            args=(scan_id, image, agents, [], ["json"], language),
+                            daemon=True,
+                        )
+                        t.start()
+
+                    _scheduler_instance = ScanScheduler(scan_callback=_scheduled_scan_callback)
+                    _scheduler_instance.start()
+                except Exception as exc:
+                    return Response(
+                        {"detail": f"Scheduler unavailable: {exc}"},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+
+            agents = data.get("agents", ["all"])
+            language = data.get("language", "en")
+
+            try:
+                entry = _scheduler_instance.add_schedule(
+                    image=image, cron=cron, agents=agents, language=language
+                )
+            except Exception as exc:
+                return Response(
+                    {"detail": f"Invalid cron expression: {exc}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            return Response(entry.to_dict(), status=status.HTTP_201_CREATED)
+
+        # GET — list schedules
+        if _scheduler_instance is None:
+            return Response([])
+        return Response(_scheduler_instance.list_schedules())
+
+    @api_view(["DELETE"])
+    def delete_schedule(request: Any, schedule_id: str) -> Response:
+        """Remove a scheduled scan."""
+        global _scheduler_instance
+        if _scheduler_instance is None or not _scheduler_instance.remove_schedule(schedule_id):
+            return Response(
+                {"detail": f"Schedule {schedule_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({"detail": f"Schedule {schedule_id} deleted"})
+
     return {
         "health_check": health_check,
         "create_scan": create_scan,
@@ -756,6 +891,9 @@ def _get_views() -> dict[str, Any]:
         "webhooks": webhooks,
         "delete_webhook": delete_webhook,
         "batch_scan": batch_scan,
+        "metrics_view": metrics_view,
+        "schedules": schedules,
+        "delete_schedule": delete_schedule,
     }
 
 
@@ -777,6 +915,9 @@ def _build_urlpatterns() -> list[Any]:
         path("api/scan/<str:scan_id>/delete/", views["delete_scan"], name="delete-scan"),
         path("api/webhooks/", views["webhooks"], name="webhooks"),
         path("api/webhooks/<str:webhook_id>/", views["delete_webhook"], name="delete-webhook"),
+        path("api/metrics/", views["metrics_view"], name="metrics"),
+        path("api/schedules/", views["schedules"], name="schedules"),
+        path("api/schedules/<str:schedule_id>/", views["delete_schedule"], name="delete-schedule"),
     ]
 
     if os.environ.get("_AISEC_DASHBOARD_ENABLED", "1") == "1":
@@ -835,6 +976,8 @@ def serve(
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload (dev mode)"),
     workers: int = typer.Option(1, "--workers", "-w", help="Number of worker processes"),
     dashboard: bool = typer.Option(True, "--dashboard/--no-dashboard", help="Enable web dashboard UI"),
+    schedule: str = typer.Option("", "--schedule", help="Cron expression for recurring scans (e.g. '0 2 * * *', @daily)"),
+    schedule_image: str = typer.Option("", "--schedule-image", help="Docker image for scheduled scans"),
 ) -> None:
     """Start the AiSec REST API server (Django REST Framework).
 
@@ -849,6 +992,9 @@ def serve(
       - GET/POST /api/webhooks/    -- Manage webhook notifications
       - DELETE /api/webhooks/{id}/ -- Remove a webhook
       - GET  /api/health/          -- Health check
+      - GET  /api/metrics/         -- Prometheus metrics
+      - GET/POST /api/schedules/   -- Manage scheduled scans
+      - DELETE /api/schedules/{id}/ -- Remove a schedule
 
     When --dashboard is enabled (default), a web UI is served at /dashboard/.
 
@@ -862,6 +1008,8 @@ def serve(
       - AISEC_RATE_LIMIT  -- Request rate limit per IP, e.g. "100/min",
                              "10/s", "5000/hour". Default: 100/min.
       - AISEC_SECRET_KEY  -- Django secret key (auto-generated for dev).
+      - AISEC_LOG_FORMAT  -- Log format: "human" (default) or "json".
+      - AISEC_LOG_JSON    -- Set to "true" for JSON log output.
     """
     try:
         import django
@@ -878,14 +1026,21 @@ def serve(
 
     _configure_django()
 
+    # Set up structured logging
+    from aisec.utils.logging import setup_logging as _setup_logging
+    log_fmt = os.environ.get("AISEC_LOG_FORMAT", "human")
+    _setup_logging(level="INFO", json_format=(log_fmt == "json"))
+
     console.print(
         f"[bold cyan]AiSec API Server[/bold cyan] (Django REST Framework) starting on "
         f"[bold]http://{host}:{port}[/bold]"
     )
     console.print(f"  API root:     http://{host}:{port}/api/")
     console.print(f"  Health:       http://{host}:{port}/api/health/")
+    console.print(f"  Metrics:      http://{host}:{port}/api/metrics/")
     console.print(f"  Submit scan:  POST http://{host}:{port}/api/scan/")
     console.print(f"  List scans:   http://{host}:{port}/api/scans/")
+    console.print(f"  Schedules:    http://{host}:{port}/api/schedules/")
 
     if dashboard:
         console.print(f"  [bold cyan]Dashboard:[/bold cyan]  http://{host}:{port}/dashboard/")
@@ -899,6 +1054,36 @@ def serve(
 
     rate_limit = os.environ.get("AISEC_RATE_LIMIT", "100/min")
     console.print(f"  Rate limit:   {rate_limit}")
+
+    # Start scheduler if --schedule is provided
+    global _scheduler_instance
+    if schedule and schedule_image:
+        try:
+            from aisec.core.scheduler import ScanScheduler
+
+            def _cli_scan_callback(image: str, agents: list[str], language: str) -> None:
+                scan_id = str(uuid.uuid4())
+                _scan_store[scan_id] = {
+                    "scan_id": scan_id, "status": "pending", "image": image,
+                    "started_at": None, "completed_at": None, "finding_count": 0,
+                    "report": None, "error": None,
+                }
+                t = threading.Thread(
+                    target=_run_scan_in_thread,
+                    args=(scan_id, image, agents, [], ["json"], language),
+                    daemon=True,
+                )
+                t.start()
+
+            _scheduler_instance = ScanScheduler(scan_callback=_cli_scan_callback)
+            _scheduler_instance.add_schedule(image=schedule_image, cron=schedule)
+            _scheduler_instance.start()
+            console.print(f"  [bold green]Scheduler:[/bold green]  {schedule} → {schedule_image}")
+        except Exception as exc:
+            console.print(f"  [bold red]Scheduler:[/bold red]  Failed: {exc}")
+    elif schedule:
+        console.print("  [yellow]Scheduler: --schedule-image required with --schedule[/yellow]")
+
     console.print()
 
     try:

@@ -51,6 +51,16 @@ class AiSecConfig(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+    log_format: str = Field(default="human", description="Log format: human or json")
+
+    # Scheduler
+    schedule_cron: str = Field(default="", description="Cron expression for scheduled scans")
+    schedule_image: str = Field(default="", description="Docker image for scheduled scans")
+    log_format: str = Field(default="human", description="Log format: human or json")
+
+    # Scheduler
+    schedule_cron: str = Field(default="", description="Cron expression for scheduled scans")
+    schedule_image: str = Field(default="", description="Docker image for scheduled scans")
 
     model_config = {"env_prefix": "AISEC_"}
 
@@ -94,6 +104,9 @@ def _flatten(data: dict[str, Any], out: dict[str, Any], prefix: str = "") -> Non
         "falco.enabled": "falco_enabled",
         "falco.image": "falco_image",
         "logging.level": "log_level",
+        "logging.format": "log_format",
+        "scheduler.cron": "schedule_cron",
+        "scheduler.image": "schedule_image",
     }
     for key, value in data.items():
         full_key = f"{prefix}{key}" if prefix else key

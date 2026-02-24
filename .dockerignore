@@ -1,0 +1,46 @@
+# Version control
+.git/
+.github/
+
+# Tests
+tests/
+
+# Documentation (keep README.md for Docker labels)
+docs/
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+DECISIONS.md
+CONTEXT.md
+LICENSE
+
+# Python artifacts
+*.pyc
+__pycache__/
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Development
+.claude/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Deployment manifests (not needed inside container)
+deploy/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+*.env

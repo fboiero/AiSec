@@ -5,6 +5,69 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-24
+
+### Added
+- **Prometheus Metrics** (`src/aisec/core/metrics.py`) — Production-grade observability with Prometheus-compatible `/api/metrics/` endpoint:
+  - Counters: `aisec_scans_total` (by status), `aisec_findings_total` (by severity), `aisec_api_requests_total` (by method/endpoint/status)
+  - Gauges: `aisec_scans_active` (currently running scans)
+  - Histograms: `aisec_scan_duration_seconds`, `aisec_agent_duration_seconds` (by agent), `aisec_api_request_duration_seconds` (by method/endpoint)
+  - No-op fallback when `prometheus_client` is not installed
+  - New `[metrics]` extras group: `pip install aisec[metrics]`
+- **Structured JSON Logging** — Replaced basic `logging.Formatter` with `structlog`-based processing chain:
+  - JSON output via `AISEC_LOG_FORMAT=json` or `AISEC_LOG_JSON=true`
+  - Human-readable console output by default
+  - Request ID injection via `bind_context(request_id=...)` for API traceability
+  - `X-Request-ID` header in all API responses
+- **Scan Scheduler** (`src/aisec/core/scheduler.py`) — APScheduler-based recurring scan scheduler:
+  - Cron expression support: `0 2 * * *` (daily at 2am), `@hourly`, `@daily`, `@weekly`, `@monthly`
+  - API endpoints: `POST /api/schedules/`, `GET /api/schedules/`, `DELETE /api/schedules/{id}/`
+  - CLI flags: `aisec serve --schedule "0 2 * * *" --schedule-image myapp:latest`
+  - New `[scheduler]` extras group: `pip install aisec[scheduler]`
+- **`.dockerignore`** — Excludes `.git/`, `tests/`, `__pycache__/`, `.github/`, `docs/`, `.claude/`, `deploy/` from Docker build context
+- **3 new AiSecConfig fields**: `log_format`, `schedule_cron`, `schedule_image`
+- ~26 new tests across 3 test files: metrics (14 tests), scheduler (12 tests), structured logging (10 tests)
+
+### Changed
+- Version bumped to 1.8.0
+- `pyproject.toml`: added `[metrics]` (prometheus_client) and `[scheduler]` (apscheduler) extras groups, included in `[all]`
+- `utils/logging.py` rewritten with structlog processors (backward-compatible `setup_logging("INFO")` call signature preserved)
+- `serve.py`: instrumented with request metrics, request ID middleware, metrics/schedules endpoints
+- `scan.py`: instrumented with scan/agent/finding metrics recording
+
+## [1.8.0] - 2026-02-24
+
+### Added
+- **Prometheus Observability** (`src/aisec/core/metrics.py`) — Production-grade metrics via `prometheus_client`:
+  - Counters: `aisec_scans_total`, `aisec_findings_total` (by severity), `aisec_api_requests_total` (by method/endpoint/status)
+  - Gauges: `aisec_scans_active` (currently running scans)
+  - Histograms: `aisec_scan_duration_seconds`, `aisec_agent_duration_seconds`, `aisec_api_request_duration_seconds`
+  - `GET /api/metrics/` endpoint exposing Prometheus text format
+  - No-op fallback when `prometheus_client` is not installed
+  - New `[metrics]` extras group: `pip install aisec[metrics]`
+- **Structured JSON Logging** — Rewrote `utils/logging.py` with structlog processors:
+  - JSON output via `AISEC_LOG_FORMAT=json` or `AISEC_LOG_JSON=true` environment variables
+  - Human-readable console output by default (structlog `ConsoleRenderer`)
+  - Request ID injection via `bind_context(request_id=...)` for API traceability
+  - `X-Request-ID` header propagation in API responses
+  - Backward-compatible `setup_logging("INFO")` call signature
+- **Scan Scheduler** (`src/aisec/core/scheduler.py`) — APScheduler-based recurring scans:
+  - Cron expression support: `"0 2 * * *"` (daily at 2am), `@hourly`, `@daily`, `@weekly`, `@monthly`
+  - API endpoints: `POST /api/schedules/`, `GET /api/schedules/`, `DELETE /api/schedules/{id}/`
+  - CLI flags: `aisec serve --schedule "0 2 * * *" --schedule-image myapp:latest`
+  - Schedule CRUD with run tracking (last_run, run_count)
+  - New `[scheduler]` extras group: `pip install aisec[scheduler]`
+- **`.dockerignore`** — Excludes `.git/`, `tests/`, `__pycache__/`, `.github/`, `docs/`, `.claude/`, `deploy/`, `*.md` (except README) from Docker build context
+- **API instrumentation** — CorsMiddleware now records per-request metrics (method, endpoint, status, duration) and injects/propagates `X-Request-ID` header
+- **3 new config fields**: `log_format`, `schedule_cron`, `schedule_image`
+- ~26 new tests across 3 test files: metrics, scheduler, structured logging
+
+### Changed
+- Version bumped to 1.8.0
+- `pyproject.toml`: added `[metrics]` and `[scheduler]` extras groups, included in `[all]`
+- `structlog` (already in dependencies) now actively used for all logging
+- Scan CLI and API server instrumented with Prometheus metrics
+
 ## [1.7.0] - 2026-02-23
 
 ### Added
@@ -217,6 +280,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI interface: `aisec scan`, `aisec report`, `aisec config`, `aisec plugins`.
 - Apache 2.0 license.
 
+[1.8.0]: https://github.com/fboiero/AiSec/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/fboiero/AiSec/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/fboiero/AiSec/compare/v1.5.0...v1.6.0
+[1.8.0]: https://github.com/fboiero/AiSec/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/fboiero/AiSec/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/fboiero/AiSec/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/fboiero/AiSec/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/fboiero/AiSec/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/fboiero/AiSec/compare/v1.2.0...v1.3.0
