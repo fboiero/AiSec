@@ -1,0 +1,42 @@
+name: moderate
+version: "1.0"
+description: "Balanced policy for staging environments. Blocks on critical, allows limited high findings."
+
+gate:
+  block_on:
+    - severity: critical
+      count: ">0"
+    - severity: high
+      count: ">5"
+  warn_on:
+    - severity: medium
+      count: ">10"
+    - severity: high
+      count: ">0"
+
+required_agents:
+  - network
+  - dataflow
+  - privacy
+  - prompt_security
+  - supply_chain
+  - permission
+  - output
+  - crypto
+  - static_analysis
+  - dependency_audit
+  - taint_analysis
+  - rag_security
+  - mcp_security
+  - tool_chain
+
+compliance:
+  required_frameworks:
+    - gdpr
+  minimum_pass_rate: 60
+
+thresholds:
+  max_critical: 0
+  max_high: 5
+  max_medium: 20
+  min_agents_passed: 14

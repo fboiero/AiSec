@@ -342,6 +342,143 @@ CORRELATION_RULES: list[dict[str, Any]] = [
             "Restrict network access to known webhook sources."
         ),
     },
+    # --- v1.5.0 correlation rules ---
+    {
+        "name": "RAG Injection + No Input Validation = Data Exfiltration via Retrieval",
+        "conditions": [
+            {"agent": "rag_security", "title_contains": "injection", "any_title": True},
+            {"agent": "prompt_security", "title_contains": "validation", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "RAG document injection vectors combined with missing input validation "
+            "enable attackers to inject malicious documents that exfiltrate data "
+            "through the retrieval pipeline."
+        ),
+        "remediation": (
+            "Validate all document loader inputs. Implement input validation and "
+            "content filtering on both ingestion and retrieval paths."
+        ),
+    },
+    {
+        "name": "MCP No Auth + Unrestricted Tools = Agent Takeover",
+        "conditions": [
+            {"agent": "mcp_security", "title_contains": "unauthenticated", "any_title": True},
+            {"agent": "tool_chain", "severity_gte": Severity.HIGH},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Unauthenticated MCP server combined with unrestricted tool access "
+            "allows any client to invoke dangerous tools, leading to full "
+            "agent takeover."
+        ),
+        "remediation": (
+            "Add authentication to the MCP server. Implement tool allowlists "
+            "and approval flows for sensitive operations."
+        ),
+    },
+    {
+        "name": "Tool Chain No Sandbox + Code Execution = Arbitrary RCE",
+        "conditions": [
+            {"agent": "tool_chain", "title_contains": "sandbox", "any_title": True},
+            {"agent": "permission", "title_contains": "privileged", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Code execution tools without sandboxing running in a privileged "
+            "container enable arbitrary remote code execution with host-level "
+            "access."
+        ),
+        "remediation": (
+            "Sandbox all code execution tools in isolated containers. Remove "
+            "privileged mode and drop unnecessary capabilities."
+        ),
+    },
+    {
+        "name": "Memory Poisoning + No Encryption = Persistent Compromise",
+        "conditions": [
+            {"agent": "agent_memory", "title_contains": "poisoning", "any_title": True},
+            {"agent": "agent_memory", "title_contains": "unencrypted", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Memory poisoning vectors combined with unencrypted storage allow "
+            "attackers to persistently manipulate agent behavior by modifying "
+            "stored conversation context."
+        ),
+        "remediation": (
+            "Encrypt all memory stores. Validate and sanitize content before "
+            "writing to memory. Implement integrity checks on stored data."
+        ),
+    },
+    {
+        "name": "Poisoned Training Data + No Validation = Model Backdoor",
+        "conditions": [
+            {"agent": "fine_tuning", "title_contains": "untrusted", "any_title": True},
+            {"agent": "model_scan", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Training on untrusted data without validation combined with model "
+            "security issues creates a model backdoor risk. Poisoned training "
+            "data can embed hidden behaviors in the fine-tuned model."
+        ),
+        "remediation": (
+            "Validate all training data sources. Implement data quality gates "
+            "and anomaly detection. Scan fine-tuned models for backdoors."
+        ),
+    },
+    {
+        "name": "CI Secrets Exposed + No Model Signing = Supply Chain Attack",
+        "conditions": [
+            {"agent": "cicd_pipeline", "title_contains": "secret", "any_title": True},
+            {"agent": "cicd_pipeline", "title_contains": "signing", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Secrets exposed in CI/CD configurations combined with missing model "
+            "signing create a supply chain attack vector. Attackers can use "
+            "stolen credentials to push poisoned models."
+        ),
+        "remediation": (
+            "Move all secrets to CI/CD platform secret stores. Implement model "
+            "signing with cosign or sigstore. Verify signatures before deployment."
+        ),
+    },
+    {
+        "name": "RAG + Embedding No Auth = Retrieval Manipulation",
+        "conditions": [
+            {"agent": "rag_security", "title_contains": "retrieval", "any_title": True},
+            {"agent": "embedding_leakage", "title_contains": "without authentication", "any_title": True},
+        ],
+        "severity": Severity.HIGH,
+        "description": (
+            "RAG pipeline retrieval issues combined with unauthenticated vector "
+            "databases allow attackers to manipulate search results by injecting "
+            "or modifying embeddings directly."
+        ),
+        "remediation": (
+            "Authenticate all vector database connections. Add metadata filtering "
+            "to retrieval queries. Monitor for anomalous embedding updates."
+        ),
+    },
+    {
+        "name": "Fine-tuning PII + No Consent = Regulatory Violation",
+        "conditions": [
+            {"agent": "fine_tuning", "title_contains": "PII", "any_title": True},
+            {"agent": "data_lineage", "title_contains": "consent", "any_title": True},
+        ],
+        "severity": Severity.HIGH,
+        "description": (
+            "PII in training data without consent mechanisms violates GDPR Art. 6 "
+            "(lawful basis for processing) and CCPA requirements. Fine-tuning on "
+            "personal data requires explicit consent or legitimate interest basis."
+        ),
+        "remediation": (
+            "Implement consent collection before using PII for training. Scrub PII "
+            "from training data. Document lawful basis for processing under GDPR."
+        ),
+    },
 ]
 
 

@@ -1,0 +1,73 @@
+# Remediation Plan
+
+**Scan ID:** {{ plan.scan_id }}
+**Findings:** {{ plan.total_findings }} | **Suggestions:** {{ plan.total_suggestions }} | **Estimated effort:** {{ plan.estimated_effort }}
+
+---
+
+{% if plan.quick_wins %}
+## Quick Wins (Low Effort, High Impact)
+
+{% for fix in plan.quick_wins %}
+### {{ fix.title }}
+
+{{ fix.description }}
+
+{% for patch in fix.code_patches %}
+**{{ patch.explanation }}**
+
+```{{ patch.language }}
+# Before:
+{{ patch.before }}
+# After:
+{{ patch.after }}
+```
+
+{% endfor %}
+{% if fix.commands %}
+**Commands:**
+
+```bash
+{% for cmd in fix.commands %}
+{{ cmd }}
+{% endfor %}
+```
+{% endif %}
+
+---
+{% endfor %}
+{% endif %}
+
+{% for label, fixes in [("Critical", plan.critical_fixes), ("High", plan.high_fixes), ("Medium", plan.medium_fixes), ("Low", plan.low_fixes)] %}
+{% set remaining = [] %}
+{% for f in fixes %}{% if f not in plan.quick_wins %}{% if remaining.append(f) %}{% endif %}{% endif %}{% endfor %}
+{% if remaining %}
+## {{ label }} Priority
+
+{% for fix in remaining %}
+### {{ fix.title }}
+
+{{ fix.description }}
+
+**Effort:** {{ fix.effort }}
+
+{% for patch in fix.code_patches %}
+```{{ patch.language }}
+# Before:
+{{ patch.before }}
+# After:
+{{ patch.after }}
+```
+{% endfor %}
+
+{% if fix.references %}
+**References:**
+{% for ref in fix.references %}
+- {{ ref }}
+{% endfor %}
+{% endif %}
+
+---
+{% endfor %}
+{% endif %}
+{% endfor %}

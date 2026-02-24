@@ -1,0 +1,27 @@
+name: permissive
+version: "1.0"
+description: "Permissive policy for development and testing. Only blocks on excessive critical findings."
+
+gate:
+  block_on:
+    - severity: critical
+      count: ">2"
+  warn_on:
+    - severity: critical
+      count: ">0"
+    - severity: high
+      count: ">10"
+
+required_agents:
+  - network
+  - dataflow
+  - prompt_security
+  - supply_chain
+  - permission
+  - static_analysis
+
+thresholds:
+  max_critical: 2
+  max_high: 15
+  max_medium: 50
+  min_agents_passed: 6

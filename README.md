@@ -26,10 +26,13 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 
 ### Key Features
 
-- **28 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
+- **34 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
 - **Docker-Based Sandboxing** - Target AI agents run in isolated Docker environments with full network and filesystem instrumentation
 - **8 Compliance Frameworks** - GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST AI 600-1, NIST AI RMF, Argentina AI Bill
-- **200+ Risk Detectors** - Covering prompt injection, taint analysis, cryptographic weaknesses, supply chain, serialization, resource exhaustion, data lineage, and more
+- **250+ Risk Detectors** - Covering prompt injection, taint analysis, RAG security, MCP hardening, tool chain exploits, memory poisoning, and more
+- **Auto-Remediation Engine** - Generates structured fix suggestions with code patches, commands, and framework-specific guidance
+- **Policy-as-Code** - YAML-based security policies for CI/CD gating (strict/moderate/permissive)
+- **26 Correlation Rules** - Cross-agent compound risk detection (e.g., "MCP no auth + unrestricted tools = agent takeover")
 - **AI-CVSS Scoring** - Extended CVSS scoring with AI-specific risk dimensions (autonomy impact, cascade potential, persistence risk)
 - **4 Report Formats** - JSON, HTML, PDF, and SARIF for IDE/CI integration (GitHub Code Scanning, VS Code)
 - **REST API** - `aisec serve` with Django REST Framework for programmatic access
@@ -66,6 +69,12 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
   │  TaintAnalysis   Serialization   GitHistorySecrets            │
   │  DeepDependency  ResourceExhaustion  InterService             │
   │  DataLineage     EmbeddingLeakage                             │
+  └───────────────────────────────────────────────────────────────┘
+                                   |
+  ┌──────── Layer 4: Agentic Runtime & Remediation (v1.5) ────────┐
+  │  RAGSecurity   MCPSecurity   ToolChain   AgentMemory          │
+  │  FineTuning    CICDPipeline                                   │
+  │  [Auto-Remediation Engine]  [Policy-as-Code Engine]           │
   └───────────────────────────────────────────────────────────────┘
                                    |
                           +--------v---------+
@@ -113,6 +122,12 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 | **InterServiceAgent** | Webhook HMAC, mTLS, message queue auth, gRPC reflection, callback validation | ASI07, ASI08 |
 | **DataLineageAgent** | PII-to-LLM tracking, consent verification, right-to-erasure, GDPR/CCPA mapping | LLM02, ASI06 |
 | **EmbeddingLeakageAgent** | Vector DB auth, namespace isolation, memorization risks, embedding inversion | LLM02, LLM04, ASI06 |
+| **RAGSecurityAgent** | RAG pipeline: document injection, retrieval poisoning, context stuffing, grounding | LLM01, LLM08, ASI06 |
+| **MCPSecurityAgent** | MCP server: auth, tool schemas, transport, approval flows, path traversal | ASI01, ASI02, LLM06 |
+| **ToolChainSecurityAgent** | Tool use: sandbox, file/network/DB restrictions, output injection, chaining | LLM06, ASI02, ASI05 |
+| **AgentMemorySecurityAgent** | Memory: encryption, access control, poisoning, unbounded growth, PII | ASI06, LLM02, LLM01 |
+| **FineTuningSecurityAgent** | Training: data validation, PII scrubbing, provenance, RLHF, registry | LLM03, LLM04 |
+| **CICDPipelineSecurityAgent** | CI/CD: secrets, model signing, pip safety, Docker privilege, branch protection | LLM05, ASI04 |
 
 ## Quick Start
 
@@ -160,6 +175,45 @@ aisec scan run myagent:latest --lang es
 
 # Run with TUI dashboard
 aisec scan run myagent:latest --dashboard
+
+# Scan with auto-remediation suggestions
+aisec scan run myagent:latest --remediation
+
+# Scan with policy-based CI/CD gating
+aisec scan run myagent:latest --policy strict --gate
+```
+
+### Policy-as-Code (CI/CD Gating)
+
+```bash
+# Use built-in policies: strict, moderate, permissive
+aisec scan run myagent:latest --policy strict --gate
+# Exit code: 0=pass, 1=fail, 2=warn
+
+# Use custom policy file
+aisec scan run myagent:latest --policy-file ./my-policy.yaml --gate
+```
+
+Example policy (`.aisec-policy.yaml`):
+
+```yaml
+name: production-deployment
+gate:
+  block_on:
+    - severity: critical
+      count: ">0"
+    - severity: high
+      count: ">5"
+  warn_on:
+    - severity: medium
+      count: ">10"
+required_agents:
+  - rag_security
+  - mcp_security
+  - tool_chain
+thresholds:
+  max_critical: 0
+  max_high: 5
 ```
 
 ### REST API
@@ -330,11 +384,11 @@ mypy src/aisec/
 
 - [x] Core agent framework and orchestrator
 - [x] Docker sandbox with network/filesystem instrumentation
-- [x] 28 specialized security analysis agents
+- [x] 34 specialized security analysis agents
 - [x] OWASP LLM Top 10 + Agentic Top 10 mapping
 - [x] NIST AI RMF + NIST AI 600-1 assessment
 - [x] 8 compliance frameworks (GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST 600-1, Argentina AI)
-- [x] AI-CVSS risk scoring with 100+ risk detectors
+- [x] AI-CVSS risk scoring with 250+ risk detectors
 - [x] JSON, HTML, PDF, SARIF report generation
 - [x] Interactive TUI dashboard (Rich Live)
 - [x] REST API server (Django REST Framework)
@@ -346,7 +400,11 @@ mypy src/aisec/
 - [x] AST-based taint analysis, serialization attack surface, git history secrets
 - [x] Deep dependency analysis, resource exhaustion detection, inter-service security
 - [x] Data lineage privacy tracking, embedding leakage detection
-- [x] 18 cross-agent correlation rules
+- [x] RAG pipeline security, MCP server hardening, tool chain analysis
+- [x] Agent memory security, fine-tuning pipeline security, CI/CD pipeline security
+- [x] Auto-remediation engine with code patches and framework guidance
+- [x] Policy-as-code engine with CI/CD gating (strict/moderate/permissive)
+- [x] 26 cross-agent correlation rules
 - [ ] Cloud deployment (AWS, GCP, Azure)
 - [ ] Real-time runtime monitoring (Falco integration)
 - [ ] Web UI dashboard

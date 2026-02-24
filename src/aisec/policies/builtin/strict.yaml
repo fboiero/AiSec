@@ -1,0 +1,49 @@
+name: strict
+version: "1.0"
+description: "Zero tolerance policy for production deployments. Blocks on any critical or high finding."
+
+gate:
+  block_on:
+    - severity: critical
+      count: ">0"
+    - severity: high
+      count: ">0"
+  warn_on:
+    - severity: medium
+      count: ">5"
+
+required_agents:
+  - network
+  - dataflow
+  - privacy
+  - prompt_security
+  - supply_chain
+  - permission
+  - output
+  - crypto
+  - sbom
+  - guardrails
+  - model_scan
+  - static_analysis
+  - dependency_audit
+  - api_security
+  - iac_security
+  - taint_analysis
+  - serialization
+  - resource_exhaustion
+  - rag_security
+  - mcp_security
+  - tool_chain
+  - agent_memory
+
+compliance:
+  required_frameworks:
+    - gdpr
+    - eu_ai_act
+  minimum_pass_rate: 80
+
+thresholds:
+  max_critical: 0
+  max_high: 0
+  max_medium: 5
+  min_agents_passed: 28

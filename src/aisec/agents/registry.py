@@ -96,6 +96,12 @@ def register_core_agents() -> None:
     from aisec.agents.inter_service import InterServiceSecurityAgent
     from aisec.agents.data_lineage import DataLineagePrivacyAgent
     from aisec.agents.embedding_leakage import EmbeddingLeakageAgent
+    from aisec.agents.rag_security import RAGSecurityAgent
+    from aisec.agents.mcp_security import MCPSecurityAgent
+    from aisec.agents.tool_chain import ToolChainSecurityAgent
+    from aisec.agents.agent_memory import AgentMemorySecurityAgent
+    from aisec.agents.fine_tuning import FineTuningSecurityAgent
+    from aisec.agents.cicd_pipeline import CICDPipelineSecurityAgent
 
     for agent_cls in (
         NetworkAgent,
@@ -126,6 +132,12 @@ def register_core_agents() -> None:
         InterServiceSecurityAgent,
         DataLineagePrivacyAgent,
         EmbeddingLeakageAgent,
+        RAGSecurityAgent,
+        MCPSecurityAgent,
+        ToolChainSecurityAgent,
+        AgentMemorySecurityAgent,
+        FineTuningSecurityAgent,
+        CICDPipelineSecurityAgent,
     ):
         default_registry.register(agent_cls)
 

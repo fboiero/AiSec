@@ -5,6 +5,24 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-02-23
+
+### Added
+- **RAGSecurityAgent** (29th agent) -- RAG pipeline security: unvalidated document loaders, missing retrieval filtering, context window stuffing, document injection via user-controlled paths, chunk validation gaps, hardcoded embedding API keys, retrieval poisoning through shared collections, and output grounding verification.
+- **MCPSecurityAgent** (30th agent) -- Model Context Protocol server security: unauthenticated servers, overly permissive tool schemas, unrestricted tool access, insecure HTTP transport without TLS, missing rate limiting, sensitive tools without approval flows, resource URI path traversal, tool output sanitization, secrets in MCP configs, and debug endpoint exposure.
+- **ToolChainSecurityAgent** (31st agent) -- Function calling and tool chain security: code execution without sandbox, file system tools without path restrictions, network tools without URL allowlists, SQL injection in tool functions, tool output → prompt injection, unrestricted chain execution, missing error handling, privileged tools without authentication, dangerous tool descriptions, and tool call audit trails.
+- **AgentMemorySecurityAgent** (32nd agent) -- Agent memory and conversation persistence security: unencrypted memory stores, missing access controls, memory poisoning vectors, unbounded memory growth, cross-session data leakage, PII in persistent memory, memory injection via tool outputs, unsafe pickle serialization, and memory audit trail verification.
+- **FineTuningSecurityAgent** (33rd agent) -- Fine-tuning pipeline security: unvalidated training data sources, training data PII exposure, missing deduplication, unsafe checkpoint storage, training secrets in configs, absent data provenance tracking, RLHF reward hacking patterns, unprotected model registries, untrusted web-scraped training data, and reproducibility gaps.
+- **CICDPipelineSecurityAgent** (34th agent) -- CI/CD pipeline security for AI/ML: secrets in workflow configs, insecure model downloads without checksums, missing model signing, unsafe pip install flags, exposed training infrastructure, unprotected model artifacts, absent vulnerability scanning, Docker privileged mode in CI, unversioned model deployments, and missing branch protections.
+- **Auto-Remediation Engine** (`src/aisec/remediation/`) -- Generates structured, actionable fix suggestions for every finding with concrete code patches, CLI commands, framework-specific guidance, and priority ordering. Includes 16+ remediation strategies covering secrets, input validation, guardrails, deserialization, SQL injection, rate limiting, PII, containers, TLS, MCP, RAG, memory, CI/CD, tool sandboxing, and training data. Produces severity-prioritized remediation plans with quick-win identification and effort estimation.
+- **Policy-as-Code Engine** (`src/aisec/policies/`) -- YAML-based security policies for CI/CD gating with configurable severity thresholds, agent-specific rules, required agent lists, compliance gates, and numeric limits. Three built-in policies: `strict` (zero tolerance), `moderate` (staging), `permissive` (development). Gate verdicts (pass/fail/warn) with exit codes for CI/CD integration.
+- **8 new correlation rules** (26 total) -- Cross-agent compound risk detection: RAG injection + no validation = data exfiltration, MCP no auth + unrestricted tools = agent takeover, tool chain no sandbox + privileged = arbitrary RCE, memory poisoning + no encryption = persistent compromise, poisoned training + no validation = model backdoor, CI secrets + no signing = supply chain attack, RAG + embedding no auth = retrieval manipulation, fine-tuning PII + no consent = regulatory violation.
+
+### Changed
+- Agent count increased from 28 to 34.
+- Correlation rules increased from 18 to 26.
+- Version bumped to 1.5.0.
+
 ## [1.4.0] - 2026-02-22
 
 ### Added
@@ -145,6 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI interface: `aisec scan`, `aisec report`, `aisec config`, `aisec plugins`.
 - Apache 2.0 license.
 
+[1.5.0]: https://github.com/fboiero/AiSec/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/fboiero/AiSec/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/fboiero/AiSec/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/fboiero/AiSec/compare/v1.1.0...v1.2.0
