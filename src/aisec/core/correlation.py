@@ -462,6 +462,93 @@ CORRELATION_RULES: list[dict[str, Any]] = [
             "to retrieval queries. Monitor for anomalous embedding updates."
         ),
     },
+    # ── v1.7.0 Falco Runtime Correlation Rules ─────────────────────
+    {
+        "name": "Falco Runtime Alert + Open Port = Active Exploitation",
+        "conditions": [
+            {"agent": "falco_runtime", "severity_gte": Severity.HIGH},
+            {"agent": "network", "title_contains": "port", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Falco detected high-severity runtime activity combined with open network "
+            "ports, indicating active exploitation. An attacker may be leveraging "
+            "exposed services to execute malicious payloads inside the container."
+        ),
+        "remediation": (
+            "Isolate the container immediately. Close unnecessary ports and "
+            "investigate the Falco alerts for compromise indicators."
+        ),
+    },
+    {
+        "name": "Falco File Tampering + Weak Permissions = Model Poisoning",
+        "conditions": [
+            {"agent": "falco_runtime", "title_contains": "Tampering", "any_title": True},
+            {"agent": "permission", "title_contains": "writable", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Falco detected model file tampering combined with overly permissive "
+            "file permissions, enabling model poisoning at runtime. Attackers can "
+            "replace model weights to alter inference behaviour."
+        ),
+        "remediation": (
+            "Mount model files as read-only volumes. Apply strict file permissions "
+            "and enable file integrity monitoring."
+        ),
+    },
+    {
+        "name": "Falco Data Exfiltration + Exposed Secrets = Active Data Breach",
+        "conditions": [
+            {"agent": "falco_runtime", "title_contains": "Exfiltration", "any_title": True},
+            {"agent": "dataflow", "title_contains": "credential", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Falco detected data exfiltration patterns combined with exposed "
+            "credentials, indicating an active data breach. Stolen credentials "
+            "may be used to access additional systems."
+        ),
+        "remediation": (
+            "Rotate all exposed credentials immediately. Block exfiltration "
+            "channels (DNS tunnelling, outbound connections). Investigate scope "
+            "of data breach."
+        ),
+    },
+    {
+        "name": "Falco Crypto Mining + Resource Exhaustion = Cryptojacking",
+        "conditions": [
+            {"agent": "falco_runtime", "title_contains": "Mining", "any_title": True},
+            {"agent": "resource_exhaustion", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Falco detected cryptocurrency mining combined with resource exhaustion "
+            "indicators, confirming active cryptojacking. The container's compute "
+            "resources are being hijacked for mining."
+        ),
+        "remediation": (
+            "Terminate mining processes immediately. Apply CPU/memory limits. "
+            "Investigate how the miner was deployed and patch the entry vector."
+        ),
+    },
+    {
+        "name": "Falco Container Escape + Privileged Mode = Full Compromise",
+        "conditions": [
+            {"agent": "falco_runtime", "title_contains": "Escape", "any_title": True},
+            {"agent": "permission", "title_contains": "privileged", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Falco detected container escape attempts in a privileged container, "
+            "indicating imminent host compromise. Privileged mode disables "
+            "container isolation, making escape trivial."
+        ),
+        "remediation": (
+            "Remove privileged mode immediately. Drop all capabilities, enable "
+            "seccomp and AppArmor profiles. Audit host for signs of compromise."
+        ),
+    },
     {
         "name": "Fine-tuning PII + No Consent = Regulatory Violation",
         "conditions": [

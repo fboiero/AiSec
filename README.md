@@ -26,16 +26,19 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 
 ### Key Features
 
-- **34 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
+- **35 Specialized Agents** - Security agents work in parallel, each focused on a specific attack domain
 - **Docker-Based Sandboxing** - Target AI agents run in isolated Docker environments with full network and filesystem instrumentation
 - **8 Compliance Frameworks** - GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST AI 600-1, NIST AI RMF, Argentina AI Bill
 - **250+ Risk Detectors** - Covering prompt injection, taint analysis, RAG security, MCP hardening, tool chain exploits, memory poisoning, and more
 - **Auto-Remediation Engine** - Generates structured fix suggestions with code patches, commands, and framework-specific guidance
 - **Policy-as-Code** - YAML-based security policies for CI/CD gating (strict/moderate/permissive)
-- **26 Correlation Rules** - Cross-agent compound risk detection (e.g., "MCP no auth + unrestricted tools = agent takeover")
+- **31 Correlation Rules** - Cross-agent compound risk detection (e.g., "MCP no auth + unrestricted tools = agent takeover", "Falco + open port = active exploitation")
 - **AI-CVSS Scoring** - Extended CVSS scoring with AI-specific risk dimensions (autonomy impact, cascade potential, persistence risk)
 - **4 Report Formats** - JSON, HTML, PDF, and SARIF for IDE/CI integration (GitHub Code Scanning, VS Code)
 - **Web UI Dashboard** - Interactive web dashboard at `/dashboard/` with scan management, trend charts, and findings explorer
+- **Cloud Deployment** - Kubernetes manifests, Helm chart, Docker Compose for AWS/GCP/Azure production deployment
+- **Cloud Storage** - Upload reports to S3, GCS, or Azure Blob Storage (`--cloud-storage` flag)
+- **Falco Runtime Monitoring** - eBPF-based syscall monitoring via Falco sidecar with 9 AI-specific detection rules
 - **REST API** - `aisec serve` with Django REST Framework for programmatic access
 - **GitHub Action** - Marketplace action with SARIF upload for automated security scanning in CI/CD
 - **Scan History** - SQLite-backed trending and baseline comparison for tracking security posture over time
@@ -78,10 +81,16 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
   │  [Auto-Remediation Engine]  [Policy-as-Code Engine]           │
   └───────────────────────────────────────────────────────────────┘
                                    |
+  ┌──────── Layer 5: Cloud & Runtime Monitoring (v1.7) ──────────┐
+  │  FalcoRuntime (eBPF sidecar)  CloudStorage (S3/GCS/Azure)   │
+  │  [K8s Manifests]  [Helm Chart]  [Docker Compose]             │
+  └───────────────────────────────────────────────────────────────┘
+                                   |
                           +--------v---------+
                           |  Docker Sandbox   |
                           | +---------------+ |
                           | | Target Agent  | |
+                          | |  + Falco      | |
                           | +---------------+ |
                           +-------------------+
                                    |
@@ -129,6 +138,7 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 | **AgentMemorySecurityAgent** | Memory: encryption, access control, poisoning, unbounded growth, PII | ASI06, LLM02, LLM01 |
 | **FineTuningSecurityAgent** | Training: data validation, PII scrubbing, provenance, RLHF, registry | LLM03, LLM04 |
 | **CICDPipelineSecurityAgent** | CI/CD: secrets, model signing, pip safety, Docker privilege, branch protection | LLM05, ASI04 |
+| **FalcoRuntimeAgent** | Falco eBPF sidecar: model tampering, crypto mining, container escape, DNS exfiltration | LLM06, ASI10 |
 
 ## Quick Start
 
@@ -149,6 +159,9 @@ pip install "aisec[all]"
 
 # Install with deep dependency analysis (pipdeptree, pip-licenses)
 pip install "aisec[deptree]"
+
+# Install with cloud storage support (S3, GCS, Azure)
+pip install "aisec[cloud]"
 
 # Install with REST API server
 pip install "aisec[api]"
@@ -230,6 +243,46 @@ aisec serve --port 8000
 aisec serve --no-dashboard
 ```
 
+### Cloud Storage
+
+```bash
+# Upload reports to S3
+AISEC_CLOUD_STORAGE_BACKEND=s3 AISEC_CLOUD_STORAGE_BUCKET=my-reports \
+  aisec scan run myagent:latest --cloud-storage
+
+# Upload to Google Cloud Storage
+AISEC_CLOUD_STORAGE_BACKEND=gcs AISEC_CLOUD_STORAGE_BUCKET=my-reports \
+  aisec scan run myagent:latest --cloud-storage
+
+# Install cloud dependencies
+pip install "aisec[cloud]"
+```
+
+### Cloud Deployment
+
+```bash
+# Kubernetes (raw manifests)
+kubectl apply -n aisec -f deploy/kubernetes/
+
+# Helm
+helm install aisec deploy/helm/aisec/ -n aisec --create-namespace
+
+# Docker Compose
+docker compose -f deploy/docker-compose.prod.yml up -d
+```
+
+See [`deploy/README.md`](deploy/README.md) for full deployment guide.
+
+### Falco Runtime Monitoring
+
+```bash
+# Enable Falco eBPF sidecar during scans
+AISEC_FALCO_ENABLED=true aisec scan run myagent:latest
+
+# Falco detects: model tampering, crypto mining, container escape,
+# DNS exfiltration, reverse shells, and more
+```
+
 ### REST API
 
 ```bash
@@ -308,6 +361,15 @@ compliance:
     - iso_42001
     - nist_ai_600_1
     - argentina_ai
+
+cloud:
+  storage_backend: ""        # s3, gcs, or azure
+  storage_bucket: ""
+  storage_prefix: "aisec-reports/"
+
+falco:
+  enabled: false
+  image: "falcosecurity/falco-no-driver:latest"
 ```
 
 ## Compliance Frameworks
@@ -398,7 +460,7 @@ mypy src/aisec/
 
 - [x] Core agent framework and orchestrator
 - [x] Docker sandbox with network/filesystem instrumentation
-- [x] 34 specialized security analysis agents
+- [x] 35 specialized security analysis agents
 - [x] OWASP LLM Top 10 + Agentic Top 10 mapping
 - [x] NIST AI RMF + NIST AI 600-1 assessment
 - [x] 8 compliance frameworks (GDPR, CCPA, Habeas Data, EU AI Act, ISO 42001, NIST 600-1, Argentina AI)
@@ -418,9 +480,9 @@ mypy src/aisec/
 - [x] Agent memory security, fine-tuning pipeline security, CI/CD pipeline security
 - [x] Auto-remediation engine with code patches and framework guidance
 - [x] Policy-as-code engine with CI/CD gating (strict/moderate/permissive)
-- [x] 26 cross-agent correlation rules
-- [ ] Cloud deployment (AWS, GCP, Azure)
-- [ ] Real-time runtime monitoring (Falco integration)
+- [x] 31 cross-agent correlation rules
+- [x] Cloud deployment (AWS, GCP, Azure) — K8s manifests, Helm chart, Docker Compose, cloud storage (S3/GCS/Azure)
+- [x] Real-time runtime monitoring (Falco eBPF sidecar with 9 AI-specific rules)
 - [x] Web UI dashboard (Chart.js, Alpine.js, HTMX)
 
 ## Contributing

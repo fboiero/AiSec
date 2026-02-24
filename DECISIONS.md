@@ -1,5 +1,41 @@
 # AiSec Decision Log
 
+## 2026-02-24 — v1.7.0 Cloud Deployment & Falco Runtime Monitoring
+
+### What was asked
+Implement AiSec v1.7.0: Complete the final two roadmap items — cloud deployment (K8s, Helm, Docker Compose, cloud storage) and real-time runtime monitoring (Falco eBPF sidecar integration).
+
+### Decision made
+Implemented the full plan with these architectural choices:
+- **Cloud storage as ABC with factory** — `CloudStorageBackend` with S3/GCS/Azure backends, all SDKs optional via graceful ImportError
+- **Raw K8s YAML over Kustomize** — simpler, no additional tool dependency, alongside Helm for parameterized deployment
+- **Falco-no-driver image** — eBPF userspace mode, no kernel module required, works in containerized environments
+- **Generic deploy_sidecar()** — not Falco-specific, reusable for future sidecar use cases (tracing, monitoring)
+- **PID namespace sharing** for Falco syscall visibility into target container
+- **9 AI-specific Falco rules** covering model tampering, GPU access, prompt injection via env, crypto mining, DNS exfiltration, model download, container escape, reverse shell, training data access
+- **5 new correlation rules** combining Falco runtime findings with existing static agents for compound risk detection
+
+### Alternatives considered
+- Kustomize for K8s manifests (rejected: adds tool dependency, raw YAML + Helm covers all use cases)
+- Falco kernel module mode (rejected: requires privileged host access, no-driver mode more portable)
+- Cloud storage as middleware in Django (rejected: CLI-first approach is simpler, `--cloud-storage` flag on scan command)
+- Separate Falco parsing service (rejected: in-process parsing keeps architecture simple, no new services)
+
+### Results
+- 25 new files created, 11 files modified
+- 35 total agents registered (up from 34)
+- 31 total correlation rules (up from 26)
+- 1346 tests passing (~76 new), 12 skipped (pre-existing Django tests)
+- Cloud storage: S3, GCS, Azure Blob with `[cloud]` extras group
+- Deployment: K8s manifests, Helm chart, Docker Compose
+
+### Notes
+- Evidence model uses `type`/`summary`/`raw_data`/`location` fields, not `source`/`data` — caught during test run
+- Python 3.14 deprecates `asyncio.get_event_loop()` — async test methods must use `async def` with pytest-asyncio auto mode
+- All roadmap items now complete
+
+---
+
 ## 2026-02-23 — v1.6.0 Web UI Dashboard
 
 ### What was asked

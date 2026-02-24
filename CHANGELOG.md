@@ -5,6 +5,35 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-23
+
+### Added
+- **Cloud Deployment** — Production-ready deployment manifests for Kubernetes, Helm, and Docker Compose:
+  - 7 Kubernetes manifests: Deployment (2 replicas, health probes), Service, ConfigMap, Secret, Ingress (TLS), PVC, RBAC
+  - Helm chart with customisable `values.yaml` (replicas, resources, image, storage, ingress, Falco toggle)
+  - `docker-compose.prod.yml` with AiSec API + Nginx reverse proxy
+  - Deployment guide (`deploy/README.md`) with quickstart for K8s, Helm, and Compose
+- **Cloud Storage Module** (`src/aisec/core/cloud_storage.py`) — Upload scan reports to S3, GCS, or Azure Blob Storage:
+  - Abstract `CloudStorageBackend` with concrete `S3Backend`, `GCSBackend`, `AzureBlobBackend`
+  - Factory function `get_storage_backend(config)` for config-driven backend selection
+  - New `[cloud]` extras group: `pip install aisec[cloud]` (boto3, google-cloud-storage, azure-storage-blob)
+  - `--cloud-storage` CLI flag on `aisec scan` for automatic report upload
+- **Falco Runtime Monitoring Agent** (`falco_runtime`) — 35th agent for eBPF-based syscall monitoring:
+  - Deploys Falco as a PID-namespace-sharing sidecar container during sandbox execution
+  - 9 custom AI/ML Falco rules: model file tampering, GPU access, prompt injection via env, crypto mining, DNS exfiltration, unauthorized model download, container escape, reverse shell, training data access
+  - `FalcoAlertParser` for JSON alert parsing with OWASP LLM/Agentic framework mapping
+  - Static checks: model files in /tmp, suspicious process detection
+- **DockerManager.deploy_sidecar()** — Generic sidecar deployment with PID namespace sharing, volume mounts, and network integration (uses existing `SandboxInfo.sidecars` field)
+- **5 new correlation rules** (31 total): Falco + network (active exploitation), Falco + permissions (model poisoning), Falco + dataflow (data breach), Falco + resource exhaustion (cryptojacking), Falco + privileged mode (full compromise)
+- **5 new AiSecConfig fields**: `cloud_storage_backend`, `cloud_storage_bucket`, `cloud_storage_prefix`, `falco_enabled`, `falco_image`
+- ~61 new tests across 5 test files: cloud storage, Falco agent, alert parser, deploy manifests, correlation rules
+
+### Changed
+- Version bumped to 1.7.0
+- Agent count: 34 → 35
+- Correlation rules: 26 → 31
+- `pyproject.toml`: added `[cloud]` extras group, included in `[all]`
+
 ## [1.6.0] - 2026-02-23
 
 ### Added

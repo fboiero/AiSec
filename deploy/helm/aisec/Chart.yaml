@@ -1,0 +1,18 @@
+apiVersion: v2
+name: aisec
+description: AiSec — Deep AI Agent Security Analysis Platform
+type: application
+version: 1.7.0
+appVersion: "1.7.0"
+keywords:
+  - ai-security
+  - llm
+  - container-security
+  - falco
+  - runtime-monitoring
+home: https://github.com/fboiero/AiSec
+sources:
+  - https://github.com/fboiero/AiSec
+maintainers:
+  - name: fboiero
+    email: fboiero@gmail.com

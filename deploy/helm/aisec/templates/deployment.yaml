@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aisec.fullname" . }}
+  labels:
+    {{- include "aisec.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aisec.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aisec.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "aisec.serviceAccountName" . }}
+      containers:
+        - name: aisec-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "aisec.fullname" . }}-config
+            - secretRef:
+                name: {{ include "aisec.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          volumeMounts:
+            {{- if .Values.persistence.data.enabled }}
+            - name: aisec-data
+              mountPath: /data
+            {{- end }}
+            {{- if .Values.persistence.reports.enabled }}
+            - name: aisec-reports
+              mountPath: /reports
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.data.enabled }}
+        - name: aisec-data
+          persistentVolumeClaim:
+            claimName: {{ include "aisec.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.persistence.reports.enabled }}
+        - name: aisec-reports
+          persistentVolumeClaim:
+            claimName: {{ include "aisec.fullname" . }}-reports
+        {{- end }}

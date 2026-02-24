@@ -105,6 +105,62 @@ class DockerManager:
         logger.info("Sandbox ready: container=%s network=%s", target.short_id, network_name)
         return self._sandbox
 
+    def deploy_sidecar(
+        self,
+        image: str,
+        name: str,
+        *,
+        pid_mode: str | None = None,
+        volumes: dict[str, dict[str, str]] | None = None,
+        environment: dict[str, str] | None = None,
+        privileged: bool = False,
+        **kwargs: Any,
+    ) -> Container:
+        """Deploy a sidecar container in the sandbox network.
+
+        The sidecar shares the network with the target container and can
+        optionally share the PID namespace for process monitoring (e.g. Falco).
+        """
+        if self._network is None:
+            raise DockerError("Sandbox not initialised — call setup_sandbox() first")
+
+        sidecar_name = f"aisec-{name}-{self.scan_id[:8]}"
+        logger.info("Deploying sidecar %s (image=%s)", sidecar_name, image)
+
+        try:
+            self.client.images.pull(image)
+        except Exception as exc:
+            raise DockerError(f"Failed to pull sidecar image {image}: {exc}") from exc
+
+        run_kwargs: dict[str, Any] = {
+            "image": image,
+            "name": sidecar_name,
+            "network": self._network.name,
+            "detach": True,
+            "labels": {
+                "aisec.scan_id": self.scan_id,
+                "aisec.role": "sidecar",
+            },
+            "privileged": privileged,
+        }
+        if pid_mode:
+            run_kwargs["pid_mode"] = pid_mode
+        if volumes:
+            run_kwargs["volumes"] = volumes
+        if environment:
+            run_kwargs["environment"] = environment
+        run_kwargs.update(kwargs)
+
+        try:
+            container = self.client.containers.run(**run_kwargs)
+            self._containers.append(container)
+            if self._sandbox:
+                self._sandbox.sidecars.append(container)
+            logger.info("Sidecar ready: container=%s", container.short_id)
+            return container
+        except Exception as exc:
+            raise DockerError(f"Failed to start sidecar {sidecar_name}: {exc}") from exc
+
     def get_target_container(self) -> Container | None:
         """Return the running target container."""
         if self._sandbox:

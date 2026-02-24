@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aisec-config
+  labels:
+    app.kubernetes.io/name: aisec
+    app.kubernetes.io/component: config
+data:
+  AISEC_LOG_LEVEL: "INFO"
+  AISEC_REPORT_OUTPUT_DIR: "/reports"
+  AISEC_REPORT_FORMATS: "json,html"
+  AISEC_REPORT_LANGUAGE: "en"
+  AISEC_FALCO_ENABLED: "false"
+  AISEC_CLOUD_STORAGE_BACKEND: ""
+  AISEC_CLOUD_STORAGE_BUCKET: ""
+  AISEC_CLOUD_STORAGE_PREFIX: "aisec-reports/"

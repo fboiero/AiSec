@@ -40,6 +40,15 @@ class AiSecConfig(BaseSettings):
     plugin_dirs: list[str] = Field(default=[])
     disabled_plugins: list[str] = Field(default=[])
 
+    # Cloud storage
+    cloud_storage_backend: str = Field(default="", description="Cloud storage backend (s3, gcs, azure)")
+    cloud_storage_bucket: str = Field(default="", description="Cloud storage bucket name")
+    cloud_storage_prefix: str = Field(default="aisec-reports/", description="Key prefix for uploaded reports")
+
+    # Falco runtime monitoring
+    falco_enabled: bool = Field(default=False, description="Enable Falco sidecar for runtime monitoring")
+    falco_image: str = Field(default="falcosecurity/falco-no-driver:latest", description="Falco container image")
+
     # Logging
     log_level: str = "INFO"
 
@@ -79,6 +88,11 @@ def _flatten(data: dict[str, Any], out: dict[str, Any], prefix: str = "") -> Non
         "compliance.frameworks": "compliance_frameworks",
         "plugins.dirs": "plugin_dirs",
         "plugins.disabled": "disabled_plugins",
+        "cloud.storage_backend": "cloud_storage_backend",
+        "cloud.storage_bucket": "cloud_storage_bucket",
+        "cloud.storage_prefix": "cloud_storage_prefix",
+        "falco.enabled": "falco_enabled",
+        "falco.image": "falco_image",
         "logging.level": "log_level",
     }
     for key, value in data.items():

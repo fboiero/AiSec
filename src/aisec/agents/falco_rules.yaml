@@ -1,0 +1,91 @@
+# AiSec Custom Falco Rules for AI/ML Runtime Monitoring
+# These rules detect AI-specific threats during container sandbox execution.
+
+- rule: AI Model File Tampering
+  desc: Detect writes to common AI model file formats (.pt, .onnx, .safetensors, .h5, .pkl, .bin)
+  condition: >
+    evt.type in (open, openat) and evt.is_open_write=true and
+    (fd.name endswith .pt or fd.name endswith .onnx or fd.name endswith .safetensors or
+     fd.name endswith .h5 or fd.name endswith .pkl or fd.name endswith .bin or
+     fd.name endswith .pth or fd.name endswith .pb)
+  output: "AI model file modified (file=%fd.name user=%user.name process=%proc.name container=%container.id)"
+  priority: CRITICAL
+  tags: [aisec, ai_model, file_tampering]
+
+- rule: Suspicious GPU Access
+  desc: Detect access to GPU devices by non-standard processes
+  condition: >
+    evt.type in (open, openat) and fd.name startswith /dev/nvidia and
+    not proc.name in (python, python3, nvidia-smi, cuda-gdb)
+  output: "Suspicious GPU device access (device=%fd.name process=%proc.name user=%user.name container=%container.id)"
+  priority: WARNING
+  tags: [aisec, gpu, suspicious_access]
+
+- rule: Prompt Injection via Environment
+  desc: Detect reading of environment variables commonly used for prompt injection or API key theft
+  condition: >
+    evt.type=execve and
+    (proc.env contains SYSTEM_PROMPT or proc.env contains OPENAI_API_KEY or
+     proc.env contains ANTHROPIC_API_KEY or proc.env contains HF_TOKEN or
+     proc.env contains AWS_SECRET_ACCESS_KEY)
+  output: "Sensitive env var access during execution (process=%proc.name env_keys=%proc.env container=%container.id)"
+  priority: WARNING
+  tags: [aisec, prompt_injection, credentials]
+
+- rule: Cryptocurrency Mining Activity
+  desc: Detect execution of known cryptocurrency mining binaries
+  condition: >
+    evt.type=execve and
+    proc.name in (xmrig, minerd, cpuminer, cgminer, bfgminer, ethminer, nbminer, t-rex, phoenixminer)
+  output: "Cryptocurrency miner detected (process=%proc.name cmdline=%proc.cmdline container=%container.id)"
+  priority: CRITICAL
+  tags: [aisec, crypto_mining, malware]
+
+- rule: Data Exfiltration via DNS
+  desc: Detect unusually large DNS queries that may indicate DNS tunneling for data exfiltration
+  condition: >
+    evt.type in (sendto, sendmsg) and fd.l4proto=udp and fd.rport=53 and
+    evt.rawarg.data len > 200
+  output: "Possible DNS exfiltration (dest=%fd.rip:%fd.rport data_len=%evt.rawarg.data container=%container.id)"
+  priority: HIGH
+  tags: [aisec, data_exfiltration, dns_tunneling]
+
+- rule: Unauthorized Model Download
+  desc: Detect downloads from known model hosting domains via curl/wget
+  condition: >
+    evt.type=execve and proc.name in (curl, wget) and
+    (proc.cmdline contains huggingface.co or proc.cmdline contains models.pytorch.org or
+     proc.cmdline contains storage.googleapis.com or proc.cmdline contains civitai.com)
+  output: "Unauthorized model download (cmdline=%proc.cmdline container=%container.id)"
+  priority: HIGH
+  tags: [aisec, model_download, supply_chain]
+
+- rule: Container Escape Attempt
+  desc: Detect attempts to escape the container via known techniques
+  condition: >
+    evt.type in (open, openat, mount) and
+    (fd.name startswith /proc/1/ns or fd.name = /proc/sysrq-trigger or
+     fd.name startswith /proc/sys/kernel or fd.name = /sys/fs/cgroup)
+  output: "Container escape attempt (technique=%fd.name process=%proc.name container=%container.id)"
+  priority: CRITICAL
+  tags: [aisec, container_escape, privilege_escalation]
+
+- rule: Reverse Shell Spawned
+  desc: Detect reverse shell spawning inside the container
+  condition: >
+    evt.type=execve and
+    (proc.cmdline contains "/dev/tcp/" or proc.cmdline contains "bash -i" or
+     (proc.name in (nc, ncat, socat) and proc.cmdline contains "-e"))
+  output: "Reverse shell detected (cmdline=%proc.cmdline container=%container.id)"
+  priority: CRITICAL
+  tags: [aisec, reverse_shell, malware]
+
+- rule: Training Data Access
+  desc: Detect access to common training data directories
+  condition: >
+    evt.type in (open, openat) and
+    (fd.name contains /training_data/ or fd.name contains /datasets/ or
+     fd.name contains /data/train or fd.name contains /fine_tune/)
+  output: "Training data access detected (file=%fd.name process=%proc.name container=%container.id)"
+  priority: NOTICE
+  tags: [aisec, training_data, data_access]

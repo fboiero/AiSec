@@ -299,6 +299,6 @@ class TestContextProcessor:
 # ---------------------------------------------------------------------------
 
 class TestVersionBump:
-    def test_version_is_1_6_0(self):
+    def test_version_is_1_7_0(self):
         import aisec
-        assert aisec.__version__ == "1.6.0"
+        assert aisec.__version__ == "1.7.0"

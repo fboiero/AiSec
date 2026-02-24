@@ -102,6 +102,7 @@ def register_core_agents() -> None:
     from aisec.agents.agent_memory import AgentMemorySecurityAgent
     from aisec.agents.fine_tuning import FineTuningSecurityAgent
     from aisec.agents.cicd_pipeline import CICDPipelineSecurityAgent
+    from aisec.agents.falco_runtime import FalcoRuntimeAgent
 
     for agent_cls in (
         NetworkAgent,
@@ -138,6 +139,7 @@ def register_core_agents() -> None:
         AgentMemorySecurityAgent,
         FineTuningSecurityAgent,
         CICDPipelineSecurityAgent,
+        FalcoRuntimeAgent,
     ):
         default_registry.register(agent_cls)
 

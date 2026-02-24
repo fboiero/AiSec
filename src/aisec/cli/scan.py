@@ -407,6 +407,11 @@ def scan(
         "--dashboard/--no-dashboard",
         help="Enable interactive TUI dashboard (default: on for interactive terminals).",
     ),
+    cloud_storage: bool = typer.Option(
+        False,
+        "--cloud-storage/--no-cloud-storage",
+        help="Upload reports to cloud storage after rendering (configure via AISEC_CLOUD_STORAGE_*).",
+    ),
     profile: Optional[str] = typer.Option(  # noqa: UP007
         None,
         "--profile",
@@ -490,8 +495,20 @@ def scan(
                 Panel("[warning]No agent results produced.[/warning]", title="Results")
             )
 
-        # ── Report paths ─────────────────────────────────────────────
+        # ── Cloud storage upload ──────────────────────────────────────
         rendered = ctx.metadata.get("rendered_files", [])
+        if cloud_storage and rendered and target_cfg.cloud_storage_backend:
+            try:
+                from aisec.core.cloud_storage import get_storage_backend
+                backend = get_storage_backend(target_cfg)
+                console.print("[info]Uploading reports to cloud storage...[/info]")
+                for rpath in rendered:
+                    uri = backend.upload(Path(rpath))
+                    console.print(f"  [success]Uploaded:[/success] {uri}")
+            except Exception as exc:
+                console.print(f"[warning]Cloud storage upload failed: {exc}[/warning]")
+
+        # ── Report paths ─────────────────────────────────────────────
         if rendered:
             console.print("\n[success]Reports written to:[/success]")
             for path in rendered:

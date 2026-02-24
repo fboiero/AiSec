@@ -1,0 +1,70 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/fboiero/aisec
+  tag: "1.7.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: aisec.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+config:
+  logLevel: INFO
+  reportOutputDir: /reports
+  reportFormats: "json,html"
+  reportLanguage: en
+  falcoEnabled: false
+  cloudStorageBackend: ""
+  cloudStorageBucket: ""
+  cloudStoragePrefix: "aisec-reports/"
+
+secrets:
+  secretKey: "CHANGE-ME-generate-a-random-secret"
+
+persistence:
+  data:
+    enabled: true
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  reports:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+falco:
+  enabled: false
+  image: falcosecurity/falco-no-driver:latest
+
+serviceAccount:
+  create: true
+  name: aisec
+
+probes:
+  liveness:
+    path: /api/v1/health/
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readiness:
+    path: /api/v1/health/
+    initialDelaySeconds: 5
+    periodSeconds: 10

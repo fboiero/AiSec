@@ -1,45 +1,50 @@
 # AiSec Session Context
 
 ## Current Goal
-v1.6.0 is **implemented and tested** (pending commit/push/release).
+v1.7.0 implementation complete — ready for commit and release.
 
 ## Plan
-v1.6.0 — Web UI Dashboard (delivered, 17 new files, 5 modified, 28 tests).
+v1.7.0 — Cloud Deployment & Falco Runtime Monitoring (25 new files, 11 modified, ~61 tests).
 
 ## Completed
-- **Dashboard package** (`src/aisec/dashboard/`) with views, urls, templates, context processors
-- **11 Django templates**: base.html (dark theme, sidebar nav, inline CSS), home (charts, cards), scans (paginated/filterable), scan_detail (tabbed Alpine.js), findings (HTMX-powered explorer), trends (Chart.js time-series), policies (built-in + saved), new_scan (form), 3 HTMX partials (scan_status, scan_table, finding_rows)
-- **10 view functions** in views.py (~280 lines): home, scan_list, scan_detail, findings_explorer, trends, policies, new_scan, partial_scan_table, partial_scan_status, partial_finding_rows
-- **5 new ScanHistory methods**: severity_distribution(), search_findings(), global_trend(), distinct_targets(), count_scans()
-- **serve.py** updated: --dashboard/--no-dashboard flag, TEMPLATES config, CSRF middleware, dashboard URL include, save_scan in _run_scan_in_thread
-- **CDN libraries**: Chart.js 4.x (charts), Alpine.js 3.x (reactivity), HTMX 1.9.x (partial updates)
-- **Version** bumped to 1.6.0 in pyproject.toml and __init__.py
-- **CHANGELOG.md** updated with v1.6.0 entry
-- **README.md** updated (Web UI Dashboard section, feature list, roadmap checkbox)
-- **test_web_dashboard.py** — 28 tests (18 pass, 10 skip when Django absent)
+- **Cloud Deployment**: 7 K8s manifests, Helm chart (5 files), docker-compose.prod.yml, deploy/README.md
+- **Cloud Storage Module** (`src/aisec/core/cloud_storage.py`): S3, GCS, Azure Blob backends with factory function
+- **Falco Runtime Agent** (`falco_runtime`, 35th agent): eBPF sidecar deployment, alert parsing, 9 custom AI/ML rules
+- **Falco Alert Parser** (`src/aisec/agents/falco_alert_parser.py`): JSON parsing, OWASP mapping, severity mapping
+- **DockerManager.deploy_sidecar()**: Generic sidecar deployment with PID namespace sharing
+- **5 new correlation rules** (31 total): Falco + network/permissions/dataflow/resource_exhaustion
+- **5 new AiSecConfig fields**: cloud_storage_backend, cloud_storage_bucket, cloud_storage_prefix, falco_enabled, falco_image
+- **`--cloud-storage` CLI flag** on `aisec scan` for automatic report upload
+- **`[cloud]` extras group** in pyproject.toml (boto3, google-cloud-storage, azure-storage-blob)
+- **Version bumped** to 1.7.0 in __init__.py and pyproject.toml
+- **CHANGELOG.md** updated with v1.7.0 entry
+- **README.md** updated: 35 agents, 31 rules, Layer 5 architecture, cloud/Falco sections, roadmap checkboxes
+- **5 test files** (~61 tests): cloud_storage, falco_agent, alert_parser, deploy_manifests, correlation_v17
+- **All 1346 tests pass** (12 skipped — Django-related)
 
 ## Pending
-- Git commit and push
-- GitHub release
+- Git commit, tag, push, GitHub release for v1.7.0
 
 ## Key Decisions
-- Dashboard served at /dashboard/ via Django templates (not SPA/React) — no new build tooling
-- CDN-loaded JS libraries (Chart.js, Alpine.js, HTMX) — no npm/node dependencies
-- Inline CSS in base.html reusing styles.css variables — consistent with report pattern
-- HTMX polling every 2s for scan status — no SSE/WebSocket needed
-- All templates use custom CSS classes from base.html (not Bootstrap/Tailwind)
-- --dashboard flag defaults to enabled for immediate usability
-- save_scan() call added to _run_scan_in_thread to persist API scans to SQLite
+- Cloud storage backends use optional SDK imports (boto3, google-cloud-storage, azure-storage-blob) — graceful ImportError
+- Falco uses falco-no-driver image (eBPF userspace) — no kernel module required
+- Falco sidecar shares PID namespace with target container for syscall visibility
+- deploy_sidecar() is generic (not Falco-specific) for future sidecar use cases
+- K8s manifests are raw YAML (no Kustomize) for maximum simplicity
 
 ## Relevant Paths
-- Dashboard: `src/aisec/dashboard/{__init__,views,urls,context_processors}.py`
-- Templates: `src/aisec/dashboard/templates/dashboard/{base,home,scans,scan_detail,findings,trends,policies,new_scan}.html`
-- Partials: `src/aisec/dashboard/templates/dashboard/partials/{scan_status,scan_table,finding_rows}.html`
-- History: `src/aisec/core/history.py` (5 new methods)
-- Serve: `src/aisec/cli/serve.py` (--dashboard, save_scan, URL routing)
-- Tests: `tests/unit/test_web_dashboard.py`
+- Cloud storage: `src/aisec/core/cloud_storage.py`
+- Falco agent: `src/aisec/agents/falco_runtime.py`
+- Alert parser: `src/aisec/agents/falco_alert_parser.py`
+- Falco rules: `src/aisec/agents/falco_rules.yaml`
+- Config: `src/aisec/core/config.py` (5 new fields)
+- Docker manager: `src/aisec/docker_/manager.py` (deploy_sidecar)
+- Scan CLI: `src/aisec/cli/scan.py` (--cloud-storage flag)
+- K8s manifests: `deploy/kubernetes/`
+- Helm chart: `deploy/helm/aisec/`
+- Docker Compose: `deploy/docker-compose.prod.yml`
+- Tests: `tests/unit/test_cloud_storage.py`, `tests/unit/agents/test_falco_runtime_agent.py`, `tests/unit/test_falco_alert_parser.py`, `tests/unit/test_deploy_manifests.py`, `tests/unit/test_correlation_v17.py`
 
 ## Commands
 - Run tests: `PYTHONPATH=src python3 -m pytest tests/ -x -q`
-- Run dashboard tests: `PYTHONPATH=src python3 -m pytest tests/unit/test_web_dashboard.py -x -q`
-- Import check: `PYTHONPATH=src python3 -c "from aisec.dashboard.views import home; print('OK')"`
+- Import check: `PYTHONPATH=src python3 -c "from aisec.agents.falco_runtime import FalcoRuntimeAgent; print('OK')"`
