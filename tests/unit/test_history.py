@@ -70,7 +70,7 @@ class TestStats:
         history = ScanHistory(db_path=db_path)
         try:
             result = history.stats()
-            expected_keys = {"total_scans", "unique_targets", "total_findings", "baselines", "scan_policies", "db_path"}
+            expected_keys = {"total_scans", "unique_targets", "total_findings", "baselines", "scan_policies", "scan_reports", "webhooks", "db_path"}
             assert set(result.keys()) == expected_keys
         finally:
             history.close()

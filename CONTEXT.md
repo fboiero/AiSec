@@ -1,52 +1,66 @@
 # AiSec Session Context
 
 ## Current State
-- **Version**: 1.8.0 (committed `2675882`, pushed to main)
+- **Version**: 1.9.0 (local, not yet committed)
 - **Branch**: main
-- **All tests**: 1,378 passed, 10 skipped
+- **All tests**: 1,453 passed, 10 skipped
 
-## What Was Completed in v1.8.0
+## What Was Completed in v1.9.0
 
-### New Files (6)
-1. `src/aisec/core/metrics.py` — Prometheus counters/gauges/histograms with no-op fallback
-2. `src/aisec/core/scheduler.py` — APScheduler ScanScheduler with cron + aliases
-3. `.dockerignore` — Excludes .git, tests, __pycache__, .github, docs, .claude, deploy
-4. `tests/unit/test_metrics.py` — 11 tests
-5. `tests/unit/test_scheduler.py` — 13 tests
-6. `tests/unit/test_structured_logging.py` — 8 tests
+### New Files (10)
+1. `src/aisec/utils/url_validator.py` — SSRF protection for webhook URLs
+2. `tests/unit/test_url_validator.py` — 12 tests
+3. `tests/unit/test_error_responses.py` — 9 tests
+4. `tests/unit/test_scan_persistence.py` — 15 tests
+5. `tests/unit/test_webhook_persistence.py` — 11 tests
+6. `tests/unit/test_scan_queue.py` — 5 tests
+7. `tests/unit/test_security_headers.py` — 6 tests
+8. `tests/unit/test_plugin_hooks.py` — 16 tests
+9. `.github/workflows/codeql.yml` — Weekly + PR CodeQL analysis
+10. `.github/dependabot.yml` — pip, GitHub Actions, Docker dependency updates
 
-### Modified Files (10)
-1. `src/aisec/utils/logging.py` — Rewritten with structlog (JSON/console, bind_context)
-2. `src/aisec/cli/serve.py` — /api/metrics/, /api/schedules/ endpoints, --schedule flags, request ID middleware
-3. `src/aisec/cli/scan.py` — Scan/agent/finding metrics instrumentation
-4. `src/aisec/core/config.py` — log_format, schedule_cron, schedule_image fields
-5. `src/aisec/__init__.py` — Version 1.8.0
-6. `pyproject.toml` — [metrics], [scheduler] extras in [all]
-7. `CHANGELOG.md` — v1.8.0 entry
-8. `README.md` — Observability, logging, scheduler sections + Layer 6 architecture
-9. `DECISIONS.md` — v1.8.0 decision entry
-10. `tests/unit/test_web_dashboard.py` — Version test updated
+### Modified Files (14+)
+1. `src/aisec/core/config.py` — Removed duplicate fields, added 5 new fields
+2. `src/aisec/core/exceptions.py` — WebhookError, QueueFullError, ValidationError, error_response()
+3. `src/aisec/core/history.py` — scan_reports + webhooks tables, 8 CRUD methods
+4. `src/aisec/cli/serve.py` — Persistence, ThreadPoolExecutor, security headers, SSRF, cancel endpoint
+5. `src/aisec/plugins/loader.py` — PluginManager class with error-isolated hooks
+6. `src/aisec/agents/orchestrator.py` — Plugin hooks wired into scan lifecycle
+7. `src/aisec/dashboard/context_processors.py` — Updated from _scan_store to _get_history()
+8. `src/aisec/dashboard/views.py` — All _scan_store references to persistent store
+9. `Dockerfile` — Multi-stage build, non-root user, HEALTHCHECK
+10. `docker-compose.yml` — Resource limits, restart policy, named volume
+11. `.github/workflows/ci.yml` — Bandit security lint step
+12. `src/aisec/__init__.py` — Version 1.9.0
+13. `pyproject.toml` — Version 1.9.0
+14. `CHANGELOG.md` — v1.9.0 entry
+15. `README.md` — Updated key features
 
 ## Pending
-- Nothing pending — v1.8.0 is released
+- Git commit, tag, push, and GitHub release for v1.9.0
 
 ## Key Decisions
-- prometheus_client as optional [metrics] extra with no-op fallback
-- APScheduler 3.x BackgroundScheduler (thread-based, matches Django sync model)
-- structlog activated (was already in dependencies but unused)
-- Request ID tracing via CorsMiddleware (no separate middleware)
+- SQLite persistence for scan reports + webhooks (replaces in-memory dicts)
+- ThreadPoolExecutor with configurable pool (default 4) instead of unbounded daemon threads
+- Security headers injected in CorsMiddleware (CSP, X-Frame-Options, HSTS, etc.)
+- SSRF protection via DNS resolution + private IP blocking
+- PluginManager with error isolation — hook failures never crash scans
+- Multi-stage Docker build with non-root user (UID 1000)
+- CodeQL + Dependabot + Bandit for CI/CD security
 
 ## Known Issues
 - `git status`/`git diff`/`git commit` can hang in this repo — workaround: use low-level git plumbing (write-tree, commit-tree, update-ref)
 
 ## Key Paths
-- Metrics: `src/aisec/core/metrics.py`
-- Scheduler: `src/aisec/core/scheduler.py`
-- Logging: `src/aisec/utils/logging.py`
-- Serve: `src/aisec/cli/serve.py`
+- URL Validator: `src/aisec/utils/url_validator.py`
+- Exceptions: `src/aisec/core/exceptions.py`
+- History (persistence): `src/aisec/core/history.py`
+- Serve API: `src/aisec/cli/serve.py`
+- Plugin Manager: `src/aisec/plugins/loader.py`
+- Orchestrator: `src/aisec/agents/orchestrator.py`
 - Config: `src/aisec/core/config.py`
 
 ## Commands
 - Run tests: `PYTHONPATH=src python3 -m pytest tests/unit/ -x -q`
-- Metrics check: `PYTHONPATH=src python3 -c "from aisec.core.metrics import get_metrics_text; print('OK')"`
-- Scheduler check: `PYTHONPATH=src python3 -c "from aisec.core.scheduler import ScanScheduler; print('OK')"`
+- URL validator check: `PYTHONPATH=src python3 -c "from aisec.utils.url_validator import validate_webhook_url; print('OK')"`
+- Plugin manager check: `PYTHONPATH=src python3 -c "from aisec.plugins.loader import PluginManager; print('OK')"`

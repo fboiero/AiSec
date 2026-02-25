@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict, deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aisec.agents.base import BaseAgent
 from aisec.core.models import AgentResult
@@ -28,6 +28,12 @@ class OrchestratorAgent:
     def __init__(self, context: ScanContext, registry: AgentRegistry) -> None:
         self.context = context
         self.registry = registry
+        self._plugin_manager: Any = None
+        try:
+            from aisec.plugins.loader import PluginManager
+            self._plugin_manager = PluginManager()
+        except Exception:
+            logger.debug("Plugin system not available")
 
     # ------------------------------------------------------------------
     # DAG building
@@ -107,6 +113,10 @@ class OrchestratorAgent:
             logger.warning("No agents enabled for this scan")
             return {}
 
+        # Plugin hook: pre_scan
+        if self._plugin_manager:
+            self._plugin_manager.call_pre_scan(self.context)
+
         layers = self.build_dag(enabled)
         logger.info(
             "Execution plan: %d layers, %d agents",
@@ -131,8 +141,22 @@ class OrchestratorAgent:
             layer_results = await asyncio.gather(*tasks)
 
             for result in layer_results:
+                # Plugin hook: on_finding (filter/modify findings)
+                if self._plugin_manager:
+                    filtered = []
+                    for finding in result.findings:
+                        processed = self._plugin_manager.call_on_finding(finding)
+                        if processed is not None:
+                            filtered.append(processed)
+                    result.findings = filtered
                 self.context.agent_results[result.agent] = result
                 self.context.event_bus.emit("agent.completed", result)
+
+        # Plugin hook: post_scan
+        if self._plugin_manager:
+            self._plugin_manager.call_post_scan(
+                self.context, dict(self.context.agent_results)
+            )
 
         logger.info(
             "Scan complete: %d agents, %d total findings",
@@ -140,6 +164,10 @@ class OrchestratorAgent:
             sum(len(r.findings) for r in self.context.agent_results.values()),
         )
         return dict(self.context.agent_results)
+
+    async def run_all(self) -> dict[str, AgentResult]:
+        """Alias for run_scan() — used by serve.py."""
+        return await self.run_scan()
 
     async def _run_agent(self, agent: BaseAgent) -> AgentResult:
         """Run a single agent, catching any unexpected errors."""
@@ -153,3 +181,7 @@ class OrchestratorAgent:
                 agent=agent.name,
                 error=str(exc),
             )
+
+
+# Backward-compatible alias used by serve.py
+Orchestrator = OrchestratorAgent

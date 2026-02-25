@@ -1,5 +1,41 @@
 # AiSec Decision Log
 
+## 2026-02-25 — v1.9.0 Security Hardening, Persistence & Plugin Hooks
+
+### What was asked
+Implement v1.9.0 addressing critical production gaps: in-memory data stores, missing security headers, SSRF risk in webhooks, unbounded scan concurrency, plugin hooks never invoked, Docker running as root, no CI security scanning.
+
+### Decisions made
+1. **SQLite persistence over Redis/Postgres** — Added `scan_reports` and `webhooks` tables to existing history.db. No new dependencies, consistent with existing ScanHistory pattern. Survives API restarts.
+2. **ThreadPoolExecutor over asyncio/Celery** — Configurable pool (default 4, queue 16) matches Django's sync model. Returns 429 when full. Cancel endpoint via Future.cancel().
+3. **Security headers in CorsMiddleware** — CSP, X-Frame-Options: DENY, HSTS (HTTPS only), X-Content-Type-Options: nosniff, Referrer-Policy. Togglable via `AISEC_SECURITY_HEADERS`.
+4. **SSRF protection via DNS resolution** — Webhook URLs validated against private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x, ::1, fc00::/7). Blocks non-http(s) schemes.
+5. **PluginManager with error isolation** — Hook failures logged but never crash scans. Supports finding suppression via `on_finding` returning None.
+6. **Multi-stage Docker build** — Builder + runtime stages, non-root user (UID/GID 1000), HEALTHCHECK instruction. Image size reduced.
+7. **CodeQL + Dependabot + Bandit** — Weekly CodeQL scans, Dependabot for pip/actions/docker, Bandit lint in CI pipeline.
+8. **Removed config.py duplicates** — log_format, schedule_cron, schedule_image were defined twice (lines 54-58 and 59-63).
+
+### Alternatives considered
+- Redis for persistence (rejected: adds infrastructure dependency for simple key-value storage)
+- Separate middleware class for security headers (rejected: CorsMiddleware already processes every request)
+- IP allowlist instead of blocklist for SSRF (rejected: too restrictive, would break legitimate webhooks)
+- Celery for scan queue (rejected: heavyweight, needs broker, overkill for 4-16 concurrent scans)
+
+### Results
+- 10 new files created, 14+ files modified
+- 75 new tests (1,453 total passing, 10 skipped)
+- 8 new ScanHistory CRUD methods
+- Scan data persists across API restarts
+- Docker runs as non-root with health checks
+- CI pipeline includes security scanning (CodeQL, Dependabot, Bandit)
+
+### Notes
+- Removing `_scan_store` dict cascaded to dashboard views.py, context_processors.py, and their tests — all updated
+- Added `Orchestrator` alias and `run_all()` method to fix latent runtime bug in serve.py imports
+- `socket.gaierror` catch changed to `OSError` for broader compatibility in URL validator
+
+---
+
 ## 2026-02-24 — v1.8.0 Observability, Scheduled Scans & Production Hardening
 
 ### What was asked

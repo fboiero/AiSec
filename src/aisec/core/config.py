@@ -56,11 +56,14 @@ class AiSecConfig(BaseSettings):
     # Scheduler
     schedule_cron: str = Field(default="", description="Cron expression for scheduled scans")
     schedule_image: str = Field(default="", description="Docker image for scheduled scans")
-    log_format: str = Field(default="human", description="Log format: human or json")
+    # Concurrency
+    max_concurrent_scans: int = Field(default=4, description="Maximum concurrent scan threads")
+    scan_queue_size: int = Field(default=16, description="Maximum queued scans before rejecting")
 
-    # Scheduler
-    schedule_cron: str = Field(default="", description="Cron expression for scheduled scans")
-    schedule_image: str = Field(default="", description="Docker image for scheduled scans")
+    # Security
+    security_headers: bool = Field(default=True, description="Inject security headers in API responses")
+    webhook_timeout: int = Field(default=10, description="Webhook delivery timeout in seconds")
+    allowed_origins: str = Field(default="*", description="CORS allowed origins (comma-separated or *)")
 
     model_config = {"env_prefix": "AISEC_"}
 
@@ -107,6 +110,11 @@ def _flatten(data: dict[str, Any], out: dict[str, Any], prefix: str = "") -> Non
         "logging.format": "log_format",
         "scheduler.cron": "schedule_cron",
         "scheduler.image": "schedule_image",
+        "concurrency.max_concurrent_scans": "max_concurrent_scans",
+        "concurrency.scan_queue_size": "scan_queue_size",
+        "security.headers": "security_headers",
+        "security.webhook_timeout": "webhook_timeout",
+        "security.allowed_origins": "allowed_origins",
     }
     for key, value in data.items():
         full_key = f"{prefix}{key}" if prefix else key

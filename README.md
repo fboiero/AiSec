@@ -42,9 +42,11 @@ Unlike traditional container scanners (Trivy, Clair) that focus on CVEs in OS pa
 - **Prometheus Metrics** - `/api/metrics/` endpoint with counters, gauges, and histograms for scans, findings, agents, and API requests
 - **Structured Logging** - structlog-based JSON logging with request ID tracing (`AISEC_LOG_FORMAT=json`)
 - **Scan Scheduler** - Cron-based recurring scans via APScheduler (`--schedule "0 2 * * *"`)
-- **Prometheus Observability** - `/api/metrics/` endpoint with counters, gauges, and histograms for scans, findings, agents, and API requests
-- **Structured JSON Logging** - structlog-based logging with JSON output, request ID tracing, and context binding
-- **Scheduled Scans** - APScheduler-based cron scheduling via CLI (`--schedule`) or API (`/api/schedules/`)
+- **Scan Persistence** - Scan reports and webhooks survive API restarts via SQLite-backed persistence
+- **Scan Queue** - Thread pool with configurable concurrency limits (`AISEC_MAX_CONCURRENT_SCANS`) and backpressure (HTTP 429)
+- **Security Headers** - CSP, X-Frame-Options, HSTS, X-Content-Type-Options on all API responses
+- **SSRF Protection** - Webhook URL validation blocks private/internal IP addresses
+- **Plugin Hooks** - `pre_scan`, `on_finding`, `post_scan`, `modify_report` hooks with error isolation
 - **REST API** - `aisec serve` with Django REST Framework for programmatic access
 - **GitHub Action** - Marketplace action with SARIF upload for automated security scanning in CI/CD
 - **Scan History** - SQLite-backed trending and baseline comparison for tracking security posture over time

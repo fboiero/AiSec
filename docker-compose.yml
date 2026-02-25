@@ -2,7 +2,23 @@ services:
   aisec:
     build: .
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./aisec-reports:/app/aisec-reports
+      - aisec-data:/home/aisec/.aisec
     environment:
       - AISEC_LOG_LEVEL=INFO
+      - AISEC_MAX_CONCURRENT_SCANS=4
+      - AISEC_SECURITY_HEADERS=true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+        reservations:
+          cpus: "0.5"
+          memory: 512m
+    restart: unless-stopped
+
+volumes:
+  aisec-data:
+    driver: local

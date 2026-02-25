@@ -78,11 +78,35 @@ CREATE TABLE IF NOT EXISTS scan_policies (
     description TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS scan_reports (
+    scan_id TEXT PRIMARY KEY,
+    target_image TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    report_json TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    error_message TEXT,
+    finding_count INTEGER DEFAULT 0,
+    image TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+    webhook_id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    secret TEXT DEFAULT '',
+    events TEXT NOT NULL DEFAULT '["scan.completed","scan.failed"]',
+    created_at TEXT NOT NULL,
+    active INTEGER DEFAULT 1
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_target ON scans(target_image);
 CREATE INDEX IF NOT EXISTS idx_scans_date ON scans(started_at);
 CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_baselines_target ON baselines(target_image);
+CREATE INDEX IF NOT EXISTS idx_scan_reports_status ON scan_reports(status);
+CREATE INDEX IF NOT EXISTS idx_scan_reports_target ON scan_reports(target_image);
+CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(active);
 """
 
 
@@ -410,12 +434,16 @@ class ScanHistory:
         findings = conn.execute("SELECT COUNT(*) FROM findings").fetchone()[0]
         baselines = conn.execute("SELECT COUNT(*) FROM baselines").fetchone()[0]
         policies = conn.execute("SELECT COUNT(*) FROM scan_policies").fetchone()[0]
+        scan_reports = conn.execute("SELECT COUNT(*) FROM scan_reports").fetchone()[0]
+        webhooks_count = conn.execute("SELECT COUNT(*) FROM webhooks").fetchone()[0]
         return {
             "total_scans": total,
             "unique_targets": targets,
             "total_findings": findings,
             "baselines": baselines,
             "scan_policies": policies,
+            "scan_reports": scan_reports,
+            "webhooks": webhooks_count,
             "db_path": str(self.db_path),
         }
 
@@ -586,3 +614,163 @@ class ScanHistory:
         result = conn.execute("DELETE FROM scan_policies WHERE name = ?", (name,))
         conn.commit()
         return result.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Scan report persistence (API server state)
+    # ------------------------------------------------------------------
+
+    def save_scan_report(
+        self,
+        scan_id: str,
+        target_image: str,
+        status: str = "pending",
+        image: str = "",
+    ) -> str:
+        """Create a scan report entry (initially pending)."""
+        conn = self._get_conn()
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT OR REPLACE INTO scan_reports
+            (scan_id, target_image, status, created_at, image)
+            VALUES (?, ?, ?, ?, ?)""",
+            (scan_id, target_image, status, now, image),
+        )
+        conn.commit()
+        return scan_id
+
+    def update_scan_report(
+        self,
+        scan_id: str,
+        status: str | None = None,
+        report_json: str | None = None,
+        error_message: str | None = None,
+        finding_count: int | None = None,
+    ) -> bool:
+        """Update fields of an existing scan report."""
+        conn = self._get_conn()
+        updates: list[str] = []
+        params: list[Any] = []
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+        if report_json is not None:
+            updates.append("report_json = ?")
+            params.append(report_json)
+        if error_message is not None:
+            updates.append("error_message = ?")
+            params.append(error_message)
+        if finding_count is not None:
+            updates.append("finding_count = ?")
+            params.append(finding_count)
+        if status in ("completed", "failed"):
+            updates.append("completed_at = ?")
+            params.append(datetime.now(timezone.utc).isoformat())
+        if not updates:
+            return False
+        params.append(scan_id)
+        result = conn.execute(
+            f"UPDATE scan_reports SET {', '.join(updates)} WHERE scan_id = ?",
+            params,
+        )
+        conn.commit()
+        return result.rowcount > 0
+
+    def get_scan_report(self, scan_id: str) -> dict[str, Any] | None:
+        """Retrieve a scan report by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM scan_reports WHERE scan_id = ?", (scan_id,)
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        if result.get("report_json"):
+            result["report"] = json.loads(result["report_json"])
+        else:
+            result["report"] = None
+        return result
+
+    def list_scan_reports(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """List scan reports (without full report JSON for performance)."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT scan_id, target_image, status, image,
+                      created_at, completed_at, finding_count, error_message
+            FROM scan_reports ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_scan_report(self, scan_id: str) -> bool:
+        """Delete a scan report."""
+        conn = self._get_conn()
+        result = conn.execute(
+            "DELETE FROM scan_reports WHERE scan_id = ?", (scan_id,)
+        )
+        conn.commit()
+        return result.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Webhook persistence
+    # ------------------------------------------------------------------
+
+    def save_webhook(
+        self,
+        webhook_id: str,
+        url: str,
+        secret: str = "",
+        events: list[str] | None = None,
+    ) -> str:
+        """Save a webhook registration."""
+        conn = self._get_conn()
+        now = datetime.now(timezone.utc).isoformat()
+        events_json = json.dumps(events or ["scan.completed", "scan.failed"])
+        conn.execute(
+            """INSERT OR REPLACE INTO webhooks
+            (webhook_id, url, secret, events, created_at, active)
+            VALUES (?, ?, ?, ?, ?, 1)""",
+            (webhook_id, url, secret, events_json, now),
+        )
+        conn.commit()
+        return webhook_id
+
+    def list_webhooks(self, active_only: bool = True) -> list[dict[str, Any]]:
+        """List registered webhooks."""
+        conn = self._get_conn()
+        if active_only:
+            rows = conn.execute(
+                "SELECT * FROM webhooks WHERE active = 1 ORDER BY created_at"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM webhooks ORDER BY created_at"
+            ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["events"] = json.loads(d.get("events", "[]"))
+            results.append(d)
+        return results
+
+    def delete_webhook(self, webhook_id: str) -> bool:
+        """Delete a webhook."""
+        conn = self._get_conn()
+        result = conn.execute(
+            "DELETE FROM webhooks WHERE webhook_id = ?", (webhook_id,)
+        )
+        conn.commit()
+        return result.rowcount > 0
+
+    def get_webhook(self, webhook_id: str) -> dict[str, Any] | None:
+        """Retrieve a single webhook by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM webhooks WHERE webhook_id = ?", (webhook_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["events"] = json.loads(d.get("events", "[]"))
+        return d

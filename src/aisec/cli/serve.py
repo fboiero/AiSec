@@ -10,13 +10,16 @@ Requires: ``pip install aisec[api]`` (django, djangorestframework).
 from __future__ import annotations
 
 import asyncio
+import atexit
 import collections
 import json
 import logging
 import os
+import signal
 import threading
 import time
 import uuid
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
@@ -39,20 +42,75 @@ serve_app = typer.Typer(help="Start the AiSec REST API server.")
 
 
 # ---------------------------------------------------------------------------
-# In-memory scan store (SQLite upgrade in future iteration)
+# Persistence-backed stores and thread pool
 # ---------------------------------------------------------------------------
 
-_scan_store: dict[str, dict[str, Any]] = {}
-_webhook_store: dict[str, dict[str, Any]] = {}
 _start_time = datetime.now(timezone.utc)
+_history: Any = None  # ScanHistory singleton
+_executor: ThreadPoolExecutor | None = None
+_scan_futures: dict[str, Future] = {}  # scan_id -> Future for cancellation
 
 # Scheduler singleton (initialised in serve() when --schedule is provided)
 _scheduler_instance: Any = None
 
 
+def _get_history() -> Any:
+    """Get or create the ScanHistory singleton."""
+    global _history
+    if _history is None:
+        from aisec.core.history import ScanHistory
+        _history = ScanHistory()
+    return _history
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """Get or create the ThreadPoolExecutor singleton."""
+    global _executor
+    if _executor is None:
+        try:
+            from aisec.core.config import AiSecConfig
+            cfg = AiSecConfig()
+            max_workers = cfg.max_concurrent_scans
+        except Exception:
+            max_workers = 4
+        _executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="aisec-scan",
+        )
+    return _executor
+
+
+def _graceful_shutdown(*_args: Any) -> None:
+    """Shut down executor and close history DB on exit."""
+    global _executor, _history
+    if _executor:
+        _executor.shutdown(wait=False, cancel_futures=True)
+        _executor = None
+    if _history:
+        _history.close()
+        _history = None
+
+
+atexit.register(_graceful_shutdown)
+
+
 # ---------------------------------------------------------------------------
 # Background scan runner (thread-based for Django's sync views)
 # ---------------------------------------------------------------------------
+
+class _ReportEncoder(json.JSONEncoder):
+    """JSON encoder that handles UUIDs, datetimes, and enums."""
+    def default(self, obj: Any) -> Any:
+        from enum import Enum
+        from uuid import UUID
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, Enum):
+            return obj.value
+        return super().default(obj)
+
 
 def _dispatch_webhooks(event: str, payload: dict[str, Any]) -> None:
     """Send event notifications to all registered webhooks."""
@@ -60,8 +118,12 @@ def _dispatch_webhooks(event: str, payload: dict[str, Any]) -> None:
     import hmac
     from urllib.request import Request, urlopen
 
-    for wh_id, wh in list(_webhook_store.items()):
-        # Check event filter
+    try:
+        webhooks = _get_history().list_webhooks(active_only=True)
+    except Exception:
+        webhooks = []
+
+    for wh in webhooks:
         events = wh.get("events", ["scan.completed", "scan.failed"])
         if event not in events:
             continue
@@ -71,15 +133,20 @@ def _dispatch_webhooks(event: str, payload: dict[str, Any]) -> None:
 
         headers = {"Content-Type": "application/json", "X-AiSec-Event": event}
 
-        # Sign payload if secret is set
         secret = wh.get("secret")
         if secret:
             sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
             headers["X-AiSec-Signature"] = f"sha256={sig}"
 
         try:
+            from aisec.core.config import AiSecConfig
+            timeout = AiSecConfig().webhook_timeout
+        except Exception:
+            timeout = 10
+
+        try:
             req = Request(url, data=body, headers=headers, method="POST")
-            urlopen(req, timeout=10)  # noqa: S310
+            urlopen(req, timeout=timeout)  # noqa: S310
             logger.info("Webhook %s dispatched to %s", event, url)
         except Exception as exc:
             logger.warning("Webhook %s to %s failed: %s", event, url, exc)
@@ -96,8 +163,7 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
     from aisec.docker_.manager import DockerManager
     from aisec.reports.builder import ReportBuilder
 
-    _scan_store[scan_id]["status"] = "running"
-    _scan_store[scan_id]["started_at"] = datetime.now(timezone.utc).isoformat()
+    _get_history().update_scan_report(scan_id, status="running")
     record_scan_start()
     _scan_start = time.monotonic()
 
@@ -128,10 +194,13 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
 
         report_dict = asdict(report)
 
-        _scan_store[scan_id]["status"] = "completed"
-        _scan_store[scan_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
-        _scan_store[scan_id]["report"] = report_dict
-        _scan_store[scan_id]["finding_count"] = report.executive_summary.total_findings
+        finding_count = report.executive_summary.total_findings
+        _get_history().update_scan_report(
+            scan_id,
+            status="completed",
+            report_json=json.dumps(report_dict, cls=_ReportEncoder),
+            finding_count=finding_count,
+        )
 
         record_scan_complete(time.monotonic() - _scan_start)
 
@@ -154,24 +223,24 @@ def _run_scan_in_thread(scan_id: str, image: str, agents: list[str],
         _dispatch_webhooks("scan.completed", {
             "scan_id": scan_id,
             "image": image,
-            "finding_count": report.executive_summary.total_findings,
+            "finding_count": finding_count,
             "critical_count": report.executive_summary.critical_count,
             "high_count": report.executive_summary.high_count,
-            "completed_at": _scan_store[scan_id]["completed_at"],
+            "completed_at": datetime.now(timezone.utc).isoformat(),
         })
 
     except Exception as exc:
         logger.exception("Scan %s failed", scan_id)
-        _scan_store[scan_id]["status"] = "failed"
-        _scan_store[scan_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
-        _scan_store[scan_id]["error"] = str(exc)
+        _get_history().update_scan_report(
+            scan_id, status="failed", error_message=str(exc)
+        )
         record_scan_complete(time.monotonic() - _scan_start, failed=True)
 
         _dispatch_webhooks("scan.failed", {
             "scan_id": scan_id,
             "image": image,
             "error": str(exc),
-            "completed_at": _scan_store[scan_id]["completed_at"],
+            "completed_at": datetime.now(timezone.utc).isoformat(),
         })
 
 
@@ -433,10 +502,30 @@ class CorsMiddleware:
         response = self.get_response(request)
         req_duration = time.monotonic() - req_start
 
-        response["Access-Control-Allow-Origin"] = "*"
+        # CORS headers
+        allowed_origins = os.environ.get("AISEC_ALLOWED_ORIGINS", "*")
+        origin = request.META.get("HTTP_ORIGIN", "")
+        if allowed_origins == "*":
+            response["Access-Control-Allow-Origin"] = "*"
+        elif origin and origin in allowed_origins.split(","):
+            response["Access-Control-Allow-Origin"] = origin
+            response["Vary"] = "Origin"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key, X-Request-ID"
         response["X-Request-ID"] = request_id
+
+        # Security headers
+        if os.environ.get("AISEC_SECURITY_HEADERS", "true").lower() != "false":
+            response["X-Content-Type-Options"] = "nosniff"
+            response["X-Frame-Options"] = "DENY"
+            response["X-XSS-Protection"] = "1; mode=block"
+            response["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
+            )
+            if request.is_secure():
+                response["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         # Inject rate-limit headers.
         throttle = _get_throttle()
@@ -590,30 +679,37 @@ def _get_views() -> dict[str, Any]:
 
         validated = serializer.validated_data
         scan_id = str(uuid.uuid4())
-        _scan_store[scan_id] = {
-            "scan_id": scan_id,
-            "status": "pending",
-            "image": validated["image"],
-            "started_at": None,
-            "completed_at": None,
-            "finding_count": 0,
-            "report": None,
-            "error": None,
-        }
 
-        t = threading.Thread(
-            target=_run_scan_in_thread,
-            args=(
-                scan_id,
-                validated["image"],
-                validated.get("agents", ["all"]),
-                validated.get("skip_agents", []),
-                validated.get("formats", ["json"]),
-                validated.get("language", "en"),
-            ),
-            daemon=True,
+        # Check queue capacity
+        from aisec.core.exceptions import error_response
+        executor = _get_executor()
+        active = sum(1 for f in _scan_futures.values() if not f.done())
+        try:
+            from aisec.core.config import AiSecConfig
+            queue_size = AiSecConfig().scan_queue_size
+        except Exception:
+            queue_size = 16
+        if active >= queue_size:
+            return Response(
+                error_response("QUEUE_FULL", f"Scan queue full ({active}/{queue_size}). Try again later."),
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Persist initial scan state
+        _get_history().save_scan_report(
+            scan_id, target_image=validated["image"], image=validated["image"]
         )
-        t.start()
+
+        future = executor.submit(
+            _run_scan_in_thread,
+            scan_id,
+            validated["image"],
+            validated.get("agents", ["all"]),
+            validated.get("skip_agents", []),
+            validated.get("formats", ["json"]),
+            validated.get("language", "en"),
+        )
+        _scan_futures[scan_id] = future
 
         result = ScanStatusSerializer({
             "scan_id": scan_id,
@@ -625,20 +721,21 @@ def _get_views() -> dict[str, Any]:
     @api_view(["GET"])
     def get_scan(request: Any, scan_id: str) -> Response:
         """Retrieve scan status and results."""
-        if scan_id not in _scan_store:
+        from aisec.core.exceptions import error_response
+        entry = _get_history().get_scan_report(scan_id)
+        if entry is None:
             return Response(
-                {"detail": f"Scan {scan_id} not found"},
+                error_response("SCAN_NOT_FOUND", f"Scan {scan_id} not found"),
                 status=status.HTTP_404_NOT_FOUND,
             )
-        entry = _scan_store[scan_id]
         data = {
             "scan_id": entry["scan_id"],
             "status": entry["status"],
-            "image": entry["image"],
-            "started_at": entry.get("started_at"),
+            "image": entry.get("image", entry.get("target_image", "")),
+            "started_at": entry.get("created_at"),
             "completed_at": entry.get("completed_at"),
             "report": entry.get("report") if entry["status"] == "completed" else None,
-            "error": entry.get("error"),
+            "error": entry.get("error_message"),
         }
         serializer = ScanResultSerializer(data)
         return Response(serializer.data)
@@ -646,17 +743,18 @@ def _get_views() -> dict[str, Any]:
     @api_view(["GET"])
     def list_scans(request: Any) -> Response:
         """List all scans and their statuses."""
+        entries = _get_history().list_scan_reports()
         scans = [
             {
                 "scan_id": e["scan_id"],
                 "status": e["status"],
-                "image": e["image"],
-                "started_at": e.get("started_at"),
+                "image": e.get("image", e.get("target_image", "")),
+                "started_at": e.get("created_at"),
                 "completed_at": e.get("completed_at"),
                 "finding_count": e.get("finding_count", 0),
-                "error": e.get("error"),
+                "error": e.get("error_message"),
             }
-            for e in _scan_store.values()
+            for e in entries
         ]
         serializer = ScanStatusSerializer(scans, many=True)
         return Response(serializer.data)
@@ -664,22 +762,44 @@ def _get_views() -> dict[str, Any]:
     @api_view(["DELETE"])
     def delete_scan(request: Any, scan_id: str) -> Response:
         """Delete a completed or failed scan from the store."""
-        if scan_id not in _scan_store:
+        from aisec.core.exceptions import error_response
+        entry = _get_history().get_scan_report(scan_id)
+        if entry is None:
             return Response(
-                {"detail": f"Scan {scan_id} not found"},
+                error_response("SCAN_NOT_FOUND", f"Scan {scan_id} not found"),
                 status=status.HTTP_404_NOT_FOUND,
             )
-        entry = _scan_store[scan_id]
         if entry["status"] == "running":
             return Response(
-                {"detail": "Cannot delete a running scan"},
+                error_response("SCAN_RUNNING", "Cannot delete a running scan"),
                 status=status.HTTP_409_CONFLICT,
             )
-        del _scan_store[scan_id]
+        _get_history().delete_scan_report(scan_id)
         return Response(
             {"detail": f"Scan {scan_id} deleted"},
             status=status.HTTP_200_OK,
         )
+
+    @api_view(["POST"])
+    def cancel_scan(request: Any, scan_id: str) -> Response:
+        """Cancel a running or pending scan."""
+        from aisec.core.exceptions import error_response
+        entry = _get_history().get_scan_report(scan_id)
+        if entry is None:
+            return Response(
+                error_response("SCAN_NOT_FOUND", f"Scan {scan_id} not found"),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if entry["status"] not in ("pending", "running"):
+            return Response(
+                error_response("SCAN_NOT_CANCELLABLE", f"Scan is {entry['status']}"),
+                status=status.HTTP_409_CONFLICT,
+            )
+        future = _scan_futures.get(scan_id)
+        if future and not future.done():
+            future.cancel()
+        _get_history().update_scan_report(scan_id, status="cancelled")
+        return Response({"detail": f"Scan {scan_id} cancelled"})
 
     # -- Webhook management views -------------------------------------------
 
@@ -694,31 +814,42 @@ def _get_views() -> dict[str, Any]:
         POST: Register a new webhook with URL, optional secret, and event filter.
         GET: List all registered webhooks.
         """
+        from aisec.core.exceptions import error_response
+
         if request.method == "POST":
             serializer = WebhookSerializer(data=request.data)
             if not serializer.is_valid():
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
             validated = serializer.validated_data
+
+            # SSRF protection
+            try:
+                from aisec.utils.url_validator import validate_webhook_url
+                validate_webhook_url(validated["url"])
+            except Exception as exc:
+                return Response(
+                    error_response("VALIDATION_ERROR", str(exc)),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             wh_id = str(uuid.uuid4())[:8]
-            _webhook_store[wh_id] = {
-                "webhook_id": wh_id,
-                "url": validated["url"],
-                "secret": validated.get("secret", ""),
-                "events": validated.get("events", ["scan.completed", "scan.failed"]),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
+            events = validated.get("events", ["scan.completed", "scan.failed"])
+            _get_history().save_webhook(
+                wh_id, validated["url"], validated.get("secret", ""), events
+            )
             result = WebhookResponseSerializer({
                 "webhook_id": wh_id,
                 "url": validated["url"],
-                "events": _webhook_store[wh_id]["events"],
+                "events": events,
             })
             return Response(result.data, status=status.HTTP_201_CREATED)
 
         # GET
+        wh_list = _get_history().list_webhooks()
         items = [
             {"webhook_id": wh["webhook_id"], "url": wh["url"], "events": wh["events"]}
-            for wh in _webhook_store.values()
+            for wh in wh_list
         ]
         result = WebhookResponseSerializer(items, many=True)
         return Response(result.data)
@@ -726,12 +857,12 @@ def _get_views() -> dict[str, Any]:
     @api_view(["DELETE"])
     def delete_webhook(request: Any, webhook_id: str) -> Response:
         """Remove a registered webhook."""
-        if webhook_id not in _webhook_store:
+        from aisec.core.exceptions import error_response
+        if not _get_history().delete_webhook(webhook_id):
             return Response(
-                {"detail": f"Webhook {webhook_id} not found"},
+                error_response("WEBHOOK_NOT_FOUND", f"Webhook {webhook_id} not found"),
                 status=status.HTTP_404_NOT_FOUND,
             )
-        del _webhook_store[webhook_id]
         return Response({"detail": f"Webhook {webhook_id} deleted"})
 
     # -- Batch scanning view -----------------------------------------------
@@ -750,37 +881,29 @@ def _get_views() -> dict[str, Any]:
         validated = serializer.validated_data
         images = validated["images"]
         if not images:
+            from aisec.core.exceptions import error_response
             return Response(
-                {"detail": "At least one image is required"},
+                error_response("VALIDATION_ERROR", "At least one image is required"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        executor = _get_executor()
         scan_ids = []
         for image in images:
             scan_id = str(uuid.uuid4())
-            _scan_store[scan_id] = {
-                "scan_id": scan_id,
-                "status": "pending",
-                "image": image,
-                "started_at": None,
-                "completed_at": None,
-                "finding_count": 0,
-                "report": None,
-                "error": None,
-            }
-            t = threading.Thread(
-                target=_run_scan_in_thread,
-                args=(
-                    scan_id,
-                    image,
-                    validated.get("agents", ["all"]),
-                    validated.get("skip_agents", []),
-                    validated.get("formats", ["json"]),
-                    validated.get("language", "en"),
-                ),
-                daemon=True,
+            _get_history().save_scan_report(
+                scan_id, target_image=image, image=image
             )
-            t.start()
+            future = executor.submit(
+                _run_scan_in_thread,
+                scan_id,
+                image,
+                validated.get("agents", ["all"]),
+                validated.get("skip_agents", []),
+                validated.get("formats", ["json"]),
+                validated.get("language", "en"),
+            )
+            _scan_futures[scan_id] = future
             scan_ids.append({"scan_id": scan_id, "image": image})
 
         return Response(
@@ -810,12 +933,13 @@ def _get_views() -> dict[str, Any]:
         global _scheduler_instance
 
         if request.method == "POST":
+            from aisec.core.exceptions import error_response
             data = request.data
             image = data.get("image")
             cron = data.get("cron")
             if not image or not cron:
                 return Response(
-                    {"detail": "Both 'image' and 'cron' fields are required"},
+                    error_response("VALIDATION_ERROR", "Both 'image' and 'cron' fields are required"),
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -826,22 +950,15 @@ def _get_views() -> dict[str, Any]:
 
                     def _scheduled_scan_callback(image: str, agents: list[str], language: str) -> None:
                         scan_id = str(uuid.uuid4())
-                        _scan_store[scan_id] = {
-                            "scan_id": scan_id,
-                            "status": "pending",
-                            "image": image,
-                            "started_at": None,
-                            "completed_at": None,
-                            "finding_count": 0,
-                            "report": None,
-                            "error": None,
-                        }
-                        t = threading.Thread(
-                            target=_run_scan_in_thread,
-                            args=(scan_id, image, agents, [], ["json"], language),
-                            daemon=True,
+                        _get_history().save_scan_report(
+                            scan_id, target_image=image, image=image
                         )
-                        t.start()
+                        executor = _get_executor()
+                        future = executor.submit(
+                            _run_scan_in_thread,
+                            scan_id, image, agents, [], ["json"], language,
+                        )
+                        _scan_futures[scan_id] = future
 
                     _scheduler_instance = ScanScheduler(scan_callback=_scheduled_scan_callback)
                     _scheduler_instance.start()
@@ -888,6 +1005,7 @@ def _get_views() -> dict[str, Any]:
         "get_scan": get_scan,
         "list_scans": list_scans,
         "delete_scan": delete_scan,
+        "cancel_scan": cancel_scan,
         "webhooks": webhooks,
         "delete_webhook": delete_webhook,
         "batch_scan": batch_scan,
@@ -913,6 +1031,7 @@ def _build_urlpatterns() -> list[Any]:
         path("api/scan/<str:scan_id>/", views["get_scan"], name="get-scan"),
         path("api/scans/", views["list_scans"], name="list-scans"),
         path("api/scan/<str:scan_id>/delete/", views["delete_scan"], name="delete-scan"),
+        path("api/scans/<str:scan_id>/cancel/", views["cancel_scan"], name="cancel-scan"),
         path("api/webhooks/", views["webhooks"], name="webhooks"),
         path("api/webhooks/<str:webhook_id>/", views["delete_webhook"], name="delete-webhook"),
         path("api/metrics/", views["metrics_view"], name="metrics"),
@@ -1063,17 +1182,15 @@ def serve(
 
             def _cli_scan_callback(image: str, agents: list[str], language: str) -> None:
                 scan_id = str(uuid.uuid4())
-                _scan_store[scan_id] = {
-                    "scan_id": scan_id, "status": "pending", "image": image,
-                    "started_at": None, "completed_at": None, "finding_count": 0,
-                    "report": None, "error": None,
-                }
-                t = threading.Thread(
-                    target=_run_scan_in_thread,
-                    args=(scan_id, image, agents, [], ["json"], language),
-                    daemon=True,
+                _get_history().save_scan_report(
+                    scan_id, target_image=image, image=image
                 )
-                t.start()
+                executor = _get_executor()
+                future = executor.submit(
+                    _run_scan_in_thread,
+                    scan_id, image, agents, [], ["json"], language,
+                )
+                _scan_futures[scan_id] = future
 
             _scheduler_instance = ScanScheduler(scan_callback=_cli_scan_callback)
             _scheduler_instance.add_schedule(image=schedule_image, cron=schedule)

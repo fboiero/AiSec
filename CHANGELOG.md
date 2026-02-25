@@ -5,6 +5,28 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-02-25
+
+### Added
+- **Scan & Webhook Persistence** — Replaced in-memory `_scan_store` and `_webhook_store` dicts with SQLite-backed tables (`scan_reports`, `webhooks`) in history.db. Scan reports and webhook registrations now survive API restarts.
+- **Scan Queue & Concurrency Control** — Replaced unbounded daemon threads with `ThreadPoolExecutor` (configurable via `AISEC_MAX_CONCURRENT_SCANS`, default 4). Queue backpressure returns HTTP 429 when full. New `POST /api/scans/{id}/cancel/` endpoint for scan cancellation.
+- **Security Headers Middleware** — CorsMiddleware now injects `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Content-Security-Policy`, and `Strict-Transport-Security` (HTTPS only). Configurable via `AISEC_SECURITY_HEADERS`.
+- **SSRF Protection** (`src/aisec/utils/url_validator.py`) — Webhook URL validation blocks private/internal IPs, non-http(s) schemes, and unresolvable hostnames.
+- **Plugin Hook Invocation** — New `PluginManager` with error-isolated dispatch for `pre_scan`, `on_finding`, `post_scan`, and `modify_report` hooks wired into the scan lifecycle.
+- **Structured Error Responses** — New exceptions (`WebhookError`, `QueueFullError`, `ValidationError`) with `error_response()` helper for consistent API error format.
+- **Docker Hardening** — Multi-stage build, non-root user, `HEALTHCHECK`, resource limits, named volumes.
+- **CI/CD Security** — CodeQL workflow, Dependabot config, Bandit security lint in CI.
+- **5 new config fields**: `max_concurrent_scans`, `scan_queue_size`, `security_headers`, `webhook_timeout`, `allowed_origins`
+- ~59 new tests across 7 test files
+
+### Fixed
+- Removed duplicate config fields (`log_format`, `schedule_cron`, `schedule_image`)
+- Added `Orchestrator` alias and `run_all()` method for serve.py compatibility
+- Dashboard views updated from in-memory store to persistent storage
+
+### Changed
+- `ScanHistory.stats()` now includes `scan_reports` and `webhooks` counts
+
 ## [1.8.0] - 2026-02-24
 
 ### Added

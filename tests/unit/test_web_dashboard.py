@@ -266,26 +266,29 @@ class TestURLResolution:
 
 @requires_django
 class TestContextProcessor:
-    @patch("aisec.cli.serve._scan_store", {})
-    def test_returns_expected_keys(self):
+    @patch("aisec.cli.serve._get_history")
+    def test_returns_expected_keys(self, mock_history):
+        mock_history.return_value.list_scan_reports.return_value = []
         from aisec.dashboard.context_processors import dashboard_context
         ctx = dashboard_context(MagicMock())
         assert "aisec_version" in ctx
         assert "nav_items" in ctx
         assert "active_scan_count" in ctx
 
-    @patch("aisec.cli.serve._scan_store", {
-        "s1": {"status": "running"},
-        "s2": {"status": "completed"},
-        "s3": {"status": "pending"},
-    })
-    def test_active_scan_count(self):
+    @patch("aisec.cli.serve._get_history")
+    def test_active_scan_count(self, mock_history):
+        mock_history.return_value.list_scan_reports.return_value = [
+            {"status": "running"},
+            {"status": "completed"},
+            {"status": "pending"},
+        ]
         from aisec.dashboard.context_processors import dashboard_context
         ctx = dashboard_context(MagicMock())
         assert ctx["active_scan_count"] == 2  # running + pending
 
-    @patch("aisec.cli.serve._scan_store", {})
-    def test_nav_items_structure(self):
+    @patch("aisec.cli.serve._get_history")
+    def test_nav_items_structure(self, mock_history):
+        mock_history.return_value.list_scan_reports.return_value = []
         from aisec.dashboard.context_processors import dashboard_context
         ctx = dashboard_context(MagicMock())
         for item in ctx["nav_items"]:
@@ -299,6 +302,6 @@ class TestContextProcessor:
 # ---------------------------------------------------------------------------
 
 class TestVersionBump:
-    def test_version_is_1_8_0(self):
+    def test_version_is_1_9_0(self):
         import aisec
-        assert aisec.__version__ == "1.8.0"
+        assert aisec.__version__ == "1.9.0"

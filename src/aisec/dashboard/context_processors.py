@@ -9,11 +9,14 @@ import aisec
 
 def dashboard_context(request: Any) -> dict[str, Any]:
     """Inject shared context into every dashboard template."""
-    from aisec.cli.serve import _scan_store
-
-    active_scans = sum(
-        1 for s in _scan_store.values() if s.get("status") in ("pending", "running")
-    )
+    try:
+        from aisec.cli.serve import _get_history
+        reports = _get_history().list_scan_reports()
+        active_scans = sum(
+            1 for s in reports if s.get("status") in ("pending", "running")
+        )
+    except Exception:
+        active_scans = 0
 
     nav_items = [
         {"url": "/dashboard/", "label": "Home", "icon": "home"},

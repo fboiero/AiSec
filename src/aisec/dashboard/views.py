@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -45,12 +44,15 @@ def home(request: HttpRequest) -> HttpResponse:
         severity_dist = history.severity_distribution()
         trend_data = history.global_trend(limit=14)
 
-        # Active scans from in-memory store
-        from aisec.cli.serve import _scan_store
-        active_scans = [
-            s for s in _scan_store.values()
-            if s.get("status") in ("pending", "running")
-        ]
+        # Active scans from persistent store
+        try:
+            from aisec.cli.serve import _get_history as _serve_history
+            reports = _serve_history().list_scan_reports()
+            active_scans = [
+                s for s in reports if s.get("status") in ("pending", "running")
+            ]
+        except Exception:
+            active_scans = []
 
         context = {
             "stats": stats,
@@ -98,9 +100,12 @@ def scan_detail(request: HttpRequest, scan_id: str) -> HttpResponse:
     try:
         scan = history.get_scan(scan_id)
         if not scan:
-            # Check in-memory store for active scans
-            from aisec.cli.serve import _scan_store
-            active = _scan_store.get(scan_id)
+            # Check persistent scan_reports for active scans
+            try:
+                from aisec.cli.serve import _get_history as _serve_history
+                active = _serve_history().get_scan_report(scan_id)
+            except Exception:
+                active = None
             if active:
                 context = {
                     "scan": active,
@@ -240,7 +245,7 @@ def policies(request: HttpRequest) -> HttpResponse:
 
 def new_scan(request: HttpRequest) -> HttpResponse:
     """Scan submission form and handler."""
-    from aisec.cli.serve import _run_scan_in_thread, _scan_store
+    from aisec.cli.serve import _run_scan_in_thread, _get_history as _serve_history, _get_executor, _scan_futures
 
     if request.method == "POST":
         image = request.POST.get("image", "").strip()
@@ -254,23 +259,16 @@ def new_scan(request: HttpRequest) -> HttpResponse:
         formats = ["json", "html"]
 
         scan_id = str(uuid.uuid4())
-        _scan_store[scan_id] = {
-            "scan_id": scan_id,
-            "status": "pending",
-            "image": image,
-            "started_at": None,
-            "completed_at": None,
-            "finding_count": 0,
-            "report": None,
-            "error": None,
-        }
-
-        t = threading.Thread(
-            target=_run_scan_in_thread,
-            args=(scan_id, image, agents, [], formats, language),
-            daemon=True,
+        _serve_history().save_scan_report(
+            scan_id, target_image=image, image=image
         )
-        t.start()
+
+        executor = _get_executor()
+        future = executor.submit(
+            _run_scan_in_thread,
+            scan_id, image, agents, [], formats, language,
+        )
+        _scan_futures[scan_id] = future
 
         from django.http import HttpResponseRedirect
         return HttpResponseRedirect(f"/dashboard/scans/{scan_id}/")
@@ -323,21 +321,22 @@ def partial_scan_table(request: HttpRequest) -> HttpResponse:
 
 def partial_scan_status(request: HttpRequest, scan_id: str) -> HttpResponse:
     """HTMX partial: scan status badge with auto-poll."""
-    from aisec.cli.serve import _scan_store
-    entry = _scan_store.get(scan_id)
+    # Check persistent scan_reports first
+    try:
+        from aisec.cli.serve import _get_history as _serve_history
+        entry = _serve_history().get_scan_report(scan_id)
+    except Exception:
+        entry = None
 
-    if not entry:
+    if entry:
+        status = entry.get("status", "unknown")
+    else:
         history = _get_history()
         try:
             scan = history.get_scan(scan_id)
-            status = scan["status"] if scan else "unknown"
-            # Completed scans don't exist in _scan_store
-            if scan:
-                status = "completed"
+            status = "completed" if scan else "unknown"
         finally:
             history.close()
-    else:
-        status = entry.get("status", "unknown")
 
     context = {"scan_id": scan_id, "status": status}
     response = _render(request, "dashboard/partials/scan_status.html", context)

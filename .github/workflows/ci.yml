@@ -40,6 +40,11 @@ jobs:
       - name: Type check with mypy
         run: mypy src/aisec/ --ignore-missing-imports
 
+      - name: Security lint with Bandit
+        run: |
+          pip install bandit
+          bandit -r src/aisec/ -ll -ii --skip B101
+
       - name: Run tests
         run: pytest tests/unit/ --cov=aisec --cov-report=xml -v
 
