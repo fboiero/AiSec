@@ -1,7 +1,7 @@
 # ============================================================
 # Stage 1: Builder — install dependencies
 # ============================================================
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 
@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir --prefix=/install ".[all]"
 # ============================================================
 # Stage 2: Runtime — minimal production image
 # ============================================================
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 LABEL maintainer="Federico Boiero <fboiero@gmail.com>"
 LABEL org.opencontainers.image.source="https://github.com/fboiero/AiSec"
