@@ -23,17 +23,32 @@ def list_plugins(
     ),
 ) -> None:
     """List all installed AiSec plugins."""
-    # Placeholder -- real implementation will query the plugin registry.
-    table = Table(title="Installed Plugins")
+    from aisec.plugins.loader import discover_plugins
+
+    plugins = discover_plugins()
+
+    table = Table(title=f"Installed Plugins ({len(plugins)})")
     table.add_column("Name", style="bold")
     table.add_column("Version")
-    table.add_column("Type")
-    table.add_column("Status", style="success")
+    table.add_column("Description")
 
-    # Example built-in entries (will be replaced by dynamic discovery).
-    table.add_row("prompt-injection", "0.1.0", "agent", "active")
-    table.add_row("tool-abuse", "0.1.0", "agent", "active")
-    table.add_row("data-exfiltration", "0.1.0", "agent", "active")
+    if not plugins:
+        console.print(table)
+        console.print(
+            "[dim]No plugins installed. Plugins are discovered via the "
+            "'aisec.plugins' entry point group.[/dim]"
+        )
+        return
+
+    for plugin in plugins:
+        desc = getattr(plugin, "description", "")
+        if len(desc) > 60:
+            desc = desc[:57] + "..."
+        table.add_row(
+            getattr(plugin, "name", "unknown"),
+            getattr(plugin, "version", "?"),
+            desc,
+        )
 
     console.print(table)
     console.print("[info]Use [bold]aisec plugins info <name>[/bold] for details.[/info]")
@@ -44,16 +59,25 @@ def info(
     name: str = typer.Argument(..., help="Plugin name to inspect."),
 ) -> None:
     """Show detailed information about a specific plugin."""
-    # Placeholder -- real implementation will query the plugin registry.
+    from aisec.plugins.loader import discover_plugins
+
+    plugins = discover_plugins()
+    match = None
+    for plugin in plugins:
+        if getattr(plugin, "name", "") == name:
+            match = plugin
+            break
+
+    if match is None:
+        console.print(f"[error]Plugin not found:[/error] {name}")
+        console.print("[info]Use [bold]aisec plugins list[/bold] to see installed plugins.[/info]")
+        raise typer.Exit(code=1)
+
     console.print(
         Panel(
-            f"[bold]{name}[/bold]\n\n"
-            f"  Version : 0.1.0\n"
-            f"  Type    : agent\n"
-            f"  Author  : AiSec Team\n"
-            f"  Status  : active\n\n"
-            f"  [dim]Detailed plugin metadata will be available once the "
-            f"plugin registry is implemented.[/dim]",
+            f"[bold]{match.name}[/bold]\n\n"
+            f"  Version     : {match.version}\n"
+            f"  Description : {match.description}",
             title=f"Plugin: {name}",
             style="agent",
         )

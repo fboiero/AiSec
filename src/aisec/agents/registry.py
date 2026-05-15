@@ -100,6 +100,7 @@ def register_core_agents() -> None:
     from aisec.agents.mcp_security import MCPSecurityAgent
     from aisec.agents.tool_chain import ToolChainSecurityAgent
     from aisec.agents.agent_memory import AgentMemorySecurityAgent
+    from aisec.agents.agentic_review import AgenticReviewAgent
     from aisec.agents.fine_tuning import FineTuningSecurityAgent
     from aisec.agents.cicd_pipeline import CICDPipelineSecurityAgent
     from aisec.agents.falco_runtime import FalcoRuntimeAgent
@@ -137,6 +138,7 @@ def register_core_agents() -> None:
         MCPSecurityAgent,
         ToolChainSecurityAgent,
         AgentMemorySecurityAgent,
+        AgenticReviewAgent,
         FineTuningSecurityAgent,
         CICDPipelineSecurityAgent,
         FalcoRuntimeAgent,

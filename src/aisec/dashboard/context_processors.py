@@ -10,7 +10,7 @@ import aisec
 def dashboard_context(request: Any) -> dict[str, Any]:
     """Inject shared context into every dashboard template."""
     try:
-        from aisec.cli.serve import _get_history
+        from aisec.api.scan_runner import _get_history
         reports = _get_history().list_scan_reports()
         active_scans = sum(
             1 for s in reports if s.get("status") in ("pending", "running")

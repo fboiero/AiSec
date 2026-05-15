@@ -46,7 +46,7 @@ def home(request: HttpRequest) -> HttpResponse:
 
         # Active scans from persistent store
         try:
-            from aisec.cli.serve import _get_history as _serve_history
+            from aisec.api.scan_runner import _get_history as _serve_history
             reports = _serve_history().list_scan_reports()
             active_scans = [
                 s for s in reports if s.get("status") in ("pending", "running")
@@ -102,7 +102,7 @@ def scan_detail(request: HttpRequest, scan_id: str) -> HttpResponse:
         if not scan:
             # Check persistent scan_reports for active scans
             try:
-                from aisec.cli.serve import _get_history as _serve_history
+                from aisec.api.scan_runner import _get_history as _serve_history
                 active = _serve_history().get_scan_report(scan_id)
             except Exception:
                 active = None
@@ -245,7 +245,7 @@ def policies(request: HttpRequest) -> HttpResponse:
 
 def new_scan(request: HttpRequest) -> HttpResponse:
     """Scan submission form and handler."""
-    from aisec.cli.serve import _run_scan_in_thread, _get_history as _serve_history, _get_executor, _scan_futures
+    from aisec.api.scan_runner import _run_scan_in_thread, _get_history as _serve_history, _get_executor, _scan_futures
 
     if request.method == "POST":
         image = request.POST.get("image", "").strip()
@@ -323,7 +323,7 @@ def partial_scan_status(request: HttpRequest, scan_id: str) -> HttpResponse:
     """HTMX partial: scan status badge with auto-poll."""
     # Check persistent scan_reports first
     try:
-        from aisec.cli.serve import _get_history as _serve_history
+        from aisec.api.scan_runner import _get_history as _serve_history
         entry = _serve_history().get_scan_report(scan_id)
     except Exception:
         entry = None

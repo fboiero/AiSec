@@ -1,66 +1,214 @@
 # AiSec Session Context
 
 ## Current State
-- **Version**: 1.9.0 (local, not yet committed)
-- **Branch**: main
-- **All tests**: 1,453 passed, 10 skipped
 
-## What Was Completed in v1.9.0
+- **Version**: `1.10.0` local.
+- **Branch**: `main`.
+- **Release target**: `v1.10.0`.
+- **Unit tests**: `1430 passed, 14 skipped`.
+- **Security agents**: `36`.
+- **Correlation rules**: `40`.
+- **Agent-on-agent correlation rules**: `9`.
+- **Model-risk protocol**: `aisec.model_risk.v1`.
+- **Primary evaluator command**: `aisec evaluate model`.
+- **Primary integration target**: OrchestAI-style model orchestration platforms.
 
-### New Files (10)
-1. `src/aisec/utils/url_validator.py` — SSRF protection for webhook URLs
-2. `tests/unit/test_url_validator.py` — 12 tests
-3. `tests/unit/test_error_responses.py` — 9 tests
-4. `tests/unit/test_scan_persistence.py` — 15 tests
-5. `tests/unit/test_webhook_persistence.py` — 11 tests
-6. `tests/unit/test_scan_queue.py` — 5 tests
-7. `tests/unit/test_security_headers.py` — 6 tests
-8. `tests/unit/test_plugin_hooks.py` — 16 tests
-9. `.github/workflows/codeql.yml` — Weekly + PR CodeQL analysis
-10. `.github/dependabot.yml` — pip, GitHub Actions, Docker dependency updates
+## Main Product Shape
 
-### Modified Files (14+)
-1. `src/aisec/core/config.py` — Removed duplicate fields, added 5 new fields
-2. `src/aisec/core/exceptions.py` — WebhookError, QueueFullError, ValidationError, error_response()
-3. `src/aisec/core/history.py` — scan_reports + webhooks tables, 8 CRUD methods
-4. `src/aisec/cli/serve.py` — Persistence, ThreadPoolExecutor, security headers, SSRF, cancel endpoint
-5. `src/aisec/plugins/loader.py` — PluginManager class with error-isolated hooks
-6. `src/aisec/agents/orchestrator.py` — Plugin hooks wired into scan lifecycle
-7. `src/aisec/dashboard/context_processors.py` — Updated from _scan_store to _get_history()
-8. `src/aisec/dashboard/views.py` — All _scan_store references to persistent store
-9. `Dockerfile` — Multi-stage build, non-root user, HEALTHCHECK
-10. `docker-compose.yml` — Resource limits, restart policy, named volume
-11. `.github/workflows/ci.yml` — Bandit security lint step
-12. `src/aisec/__init__.py` — Version 1.9.0
-13. `pyproject.toml` — Version 1.9.0
-14. `CHANGELOG.md` — v1.9.0 entry
-15. `README.md` — Updated key features
+AiSec now has two first-class surfaces:
 
-## Pending
-- Git commit, tag, push, and GitHub release for v1.9.0
+1. **Integrated evaluator**: descriptor-in, deterministic evidence-out. This is
+   the path for OrchestAI and other model orchestration platforms.
+2. **Deep scanner**: Docker image-in, deep security report-out. This remains
+   the path for containerized AI agents and runtime audits.
+
+The integration boundary is JSON, not Python imports from the consuming
+platform.
+
+## What Was Completed In The Current v1.10.0 Workspace
+
+### Developer Experience, Audit Trail, And API Maturity
+
+New/updated capabilities:
+
+- Decomposed `aisec serve` into `src/aisec/api/`.
+- Added API auth, throttling, middleware, serializers, views, URL routing,
+  scan runner, OpenAPI schema, Swagger UI, health probes, and WSGI factory.
+- Added `AuditLogger` and `audit_events` SQLite table.
+- Added `scan list`, `scan show`, `scan compare`, and `scan export`.
+- Added `agents list` and `agents info`.
+- Added CSV and Markdown renderers.
+- Implemented `report convert`.
+- Added pagination envelope for API list endpoints.
+- Kept backward-compatible imports in `src/aisec/cli/serve.py`.
+
+Key files:
+
+- `src/aisec/api/`
+- `src/aisec/core/audit.py`
+- `src/aisec/core/history.py`
+- `src/aisec/cli/agents.py`
+- `src/aisec/cli/scan.py`
+- `src/aisec/cli/report.py`
+- `src/aisec/reports/renderers/csv_renderer.py`
+- `src/aisec/reports/renderers/md_renderer.py`
+
+### Model-Risk Evaluation Foundation
+
+New/updated capabilities:
+
+- Added `ModelRiskEvaluationRequest` and `ModelRiskEvaluationResult`.
+- Added deterministic `evaluate_model_risk()` evaluator.
+- Added `aisec evaluate model`.
+- Added `aisec evaluate schema`.
+- Added JSON schemas under `docs/schemas/`.
+- Added OrchestAI request/result examples.
+- Added subprocess adapter example.
+- Added GitHub Actions and GitLab CI model-risk examples.
+- Documented advisory and blocking CI modes.
+
+Key files:
+
+- `src/aisec/evaluation/models.py`
+- `src/aisec/evaluation/evaluator.py`
+- `src/aisec/cli/evaluate.py`
+- `docs/orchestai-integration-protocol.md`
+- `docs/examples/orchestai-model-risk-request.json`
+- `docs/examples/orchestai-model-risk-result.json`
+- `docs/examples/aisec_subprocess_adapter.py`
+- `docs/examples/github-actions-model-risk.yml`
+- `docs/examples/gitlab-model-risk.yml`
+
+Important behavior:
+
+- For the same request JSON, result IDs and timestamps are deterministic.
+- `context.metadata.evaluation_created_at` or `context.metadata.created_at`
+  can set the deterministic timestamp.
+- Exit code `1` can mean policy failure with a valid result JSON. Integrators
+  should still parse and store the result.
+
+### Agent-On-Agent Analysis
+
+New agent:
+
+- `agentic_review`.
+
+File:
+
+- `src/aisec/agents/agentic_review.py`
+
+Registered in:
+
+- `src/aisec/agents/registry.py`
+
+CLI discovery:
+
+```bash
+PYTHONPATH=src python3 -m aisec agents info agentic_review
+```
+
+`agentic_review` detects:
+
+- self-review without independent reviewer boundary;
+- recursive delegation without depth or budget guard;
+- role prompts without explicit policy boundary;
+- review decisions without audit trail or rationale evidence;
+- quorum/consensus review without model/provider diversity;
+- agent output reused as downstream instructions without sanitization;
+- reviewer agents sharing privileged executor tools;
+- shared agent identities or credentials;
+- high-impact autonomous actions without human escalation;
+- shared mutable memory between executor and reviewer agents;
+- suppressed review dissent.
+
+### Correlation Growth
+
+Total correlation rules:
+
+- `40`.
+
+Rules centered on `agentic_review`:
+
+1. `Unbounded Agent Delegation + Dangerous Tools = Autonomous Tool Abuse`
+2. `Self-Review + Memory Risk = Persistent Agent Misjudgment`
+3. `Unaudited Agent Review + Cascade Risk = Untraceable Multi-Agent Failure`
+4. `Agent Handoff Injection + Weak Prompt Defenses = Cross-Agent Prompt Injection`
+5. `Reviewer Tool Sharing + Tool Chain Risk = Compromised Control Plane`
+6. `Shared Agent Identity + Exposed Credentials = Unattributable Agent Compromise`
+7. `High-Impact Agent Action + Privileged Runtime = Unchecked Production Change`
+8. `Shared Review Memory + Memory Risk = Biased Agent Oversight`
+9. `Suppressed Review Dissent + Cascade Risk = Silent Multi-Agent Failure`
+
+Key file:
+
+- `src/aisec/core/correlation.py`
+
+## Documentation For Another Agent
+
+Primary handoff:
+
+- `docs/AGENT_HANDOFF.md`
+
+Read in this order:
+
+1. `README.md`
+2. `docs/INDEX.md`
+3. `docs/AGENT_HANDOFF.md`
+4. `docs/quickstart.md`
+5. `docs/orchestai-integration-protocol.md`
+6. `docs/architecture.md`
+7. `docs/agents.md`
+8. `docs/frameworks.md`
+
+## Tests To Run
+
+Full unit suite:
+
+```bash
+PYTHONPATH=src python3 -m pytest tests/unit/ -q
+```
+
+Model-risk:
+
+```bash
+PYTHONPATH=src python3 -m pytest tests/unit/test_model_risk_evaluation.py -q
+```
+
+Agent-on-agent analysis:
+
+```bash
+PYTHONPATH=src python3 -m pytest \
+  tests/unit/agents/test_agentic_review_agent.py \
+  tests/unit/test_agentic_review_correlation.py \
+  -q
+```
+
+Adapter and CI examples:
+
+```bash
+PYTHONPATH=src python3 -m pytest \
+  tests/unit/test_orchestrator_subprocess_adapter.py \
+  tests/unit/test_ci_model_risk_examples.py \
+  -q
+```
+
+## Known Pending Cleanup
+
+- Duplicate untracked test files ending in ` 2.py` were compared against their
+  canonical counterparts and removed.
+- Review all untracked files before commit because this workspace contains many
+  newly created source, docs, and test files.
+- Commit, tag, push, and create the v1.10.0 release after a final full test run.
 
 ## Key Decisions
-- SQLite persistence for scan reports + webhooks (replaces in-memory dicts)
-- ThreadPoolExecutor with configurable pool (default 4) instead of unbounded daemon threads
-- Security headers injected in CorsMiddleware (CSP, X-Frame-Options, HSTS, etc.)
-- SSRF protection via DNS resolution + private IP blocking
-- PluginManager with error isolation — hook failures never crash scans
-- Multi-stage Docker build with non-root user (UID 1000)
-- CodeQL + Dependabot + Bandit for CI/CD security
 
-## Known Issues
-- `git status`/`git diff`/`git commit` can hang in this repo — workaround: use low-level git plumbing (write-tree, commit-tree, update-ref)
-
-## Key Paths
-- URL Validator: `src/aisec/utils/url_validator.py`
-- Exceptions: `src/aisec/core/exceptions.py`
-- History (persistence): `src/aisec/core/history.py`
-- Serve API: `src/aisec/cli/serve.py`
-- Plugin Manager: `src/aisec/plugins/loader.py`
-- Orchestrator: `src/aisec/agents/orchestrator.py`
-- Config: `src/aisec/core/config.py`
-
-## Commands
-- Run tests: `PYTHONPATH=src python3 -m pytest tests/unit/ -x -q`
-- URL validator check: `PYTHONPATH=src python3 -c "from aisec.utils.url_validator import validate_webhook_url; print('OK')"`
-- Plugin manager check: `PYTHONPATH=src python3 -c "from aisec.plugins.loader import PluginManager; print('OK')"`
+- AiSec is integrated out-of-process by default.
+- JSON request/result schemas are the compatibility boundary.
+- Missing AiSec binary and timeout are optional evaluator failures, not
+  platform failures.
+- Evaluation output must remain deterministic for artifact comparison.
+- `agentic_review` performs local meta-agent checks; `correlation.py` raises
+  severity when meta-agent issues combine with tool, memory, cascade,
+  permission, prompt, or credential risks.
+- The deep scanner remains additive and should not be required for the
+  model-risk evaluator.

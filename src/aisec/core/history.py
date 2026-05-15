@@ -107,6 +107,22 @@ CREATE INDEX IF NOT EXISTS idx_baselines_target ON baselines(target_image);
 CREATE INDEX IF NOT EXISTS idx_scan_reports_status ON scan_reports(status);
 CREATE INDEX IF NOT EXISTS idx_scan_reports_target ON scan_reports(target_image);
 CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(active);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    event_id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    actor TEXT,
+    details TEXT,
+    request_id TEXT,
+    ip_address TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_events(action);
+CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_events(resource_type, resource_id);
 """
 
 
@@ -702,6 +718,12 @@ class ScanHistory:
             (limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def count_scan_reports(self) -> int:
+        """Return total count of scan reports."""
+        conn = self._get_conn()
+        row = conn.execute("SELECT COUNT(*) FROM scan_reports").fetchone()
+        return row[0]
 
     def delete_scan_report(self, scan_id: str) -> bool:
         """Delete a scan report."""

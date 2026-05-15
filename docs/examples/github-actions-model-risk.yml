@@ -1,0 +1,48 @@
+name: AiSec Model Risk
+
+on:
+  pull_request:
+    paths:
+      - "ai/**"
+      - "models/**"
+      - "workflows/**"
+      - "docs/examples/*risk-request.json"
+  workflow_dispatch:
+
+jobs:
+  aisec-model-risk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      AISEC_REQUEST: docs/examples/orchestai-model-risk-request.json
+      AISEC_RESULT: aisec-results/model-risk-result.json
+      AISEC_FAIL_ON: critical
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install AiSec
+        run: python -m pip install aisec
+
+      - name: Evaluate model risk
+        run: |
+          mkdir -p "$(dirname "$AISEC_RESULT")"
+          aisec evaluate model \
+            --input "$AISEC_REQUEST" \
+            --output "$AISEC_RESULT" \
+            --fail-on "$AISEC_FAIL_ON" \
+            --quiet
+
+      - name: Upload model-risk evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aisec-model-risk
+          path: aisec-results/model-risk-result.json
+          if-no-files-found: warn

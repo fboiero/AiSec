@@ -1,0 +1,65 @@
+{
+  "schema_version": "aisec.model_risk.v1",
+  "request_id": "mcp-workflow-demo-001",
+  "source": "generic-orchestrator",
+  "target": {
+    "type": "workflow",
+    "name": "Research and action workflow",
+    "provider": "mixed",
+    "model_id": "router-policy-v3",
+    "environment": "staging",
+    "usage_context": "multi-step-agentic-workflow",
+    "capabilities": {
+      "rag_enabled": true,
+      "tools_enabled": true,
+      "memory_enabled": true,
+      "mcp_enabled": true,
+      "code_execution_enabled": false,
+      "web_access_enabled": true,
+      "fine_tuning_enabled": false,
+      "multimodal_enabled": false
+    },
+    "data_classes": [
+      "internal_docs",
+      "customer_messages"
+    ],
+    "metadata": {
+      "mcp_servers": [
+        "filesystem",
+        "github",
+        "internal-search"
+      ],
+      "workflow_id": "research-action"
+    }
+  },
+  "frameworks": [
+    "owasp_llm",
+    "owasp_agentic",
+    "nist_ai_rmf",
+    "nist_ai_600_1",
+    "iso_42001",
+    "gdpr"
+  ],
+  "context": {
+    "organization_id": "demo-org",
+    "project_id": "agentic-workflows",
+    "requested_by": "workflow-governance",
+    "jurisdiction": "EU",
+    "safeguards": {
+      "pii_redaction": true,
+      "prompt_logging_disabled": true,
+      "consent_required": true,
+      "retention_policy_defined": true,
+      "human_in_loop": true,
+      "tool_approval_required": true,
+      "output_filtering": true,
+      "retrieval_filtering": true,
+      "tenant_isolation": true,
+      "audit_logging": false,
+      "rate_limiting": true
+    }
+  },
+  "policy": {
+    "fail_on": "high"
+  }
+}

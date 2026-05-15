@@ -8,7 +8,7 @@ Every agent follows the same lifecycle defined by `BaseAgent`:
 2. **analyze()** - Core analysis logic (must populate `self.findings`)
 3. **teardown()** - Clean up resources
 
-## Built-in Agents (15)
+## Built-in Agents
 
 ### Core Agents (Q1)
 
@@ -73,6 +73,10 @@ Active adversarial testing: evasion attacks, encoding bypass (base64, Unicode, R
 #### CascadeAgent
 Multi-agent cascade analysis: dependency graph construction, single-point-of-failure identification, cascade failure risk assessment (health checks, circuit breakers, retry/timeout, fallback), inter-agent authentication (Bearer, JWT, mTLS, shared secrets), trust boundary mapping (network segmentation, input validation), poisoning propagation path analysis, and message integrity verification (HMAC, signatures, correlation tracking).
 - **Phase**: Static | **Depends on**: permission, network | **Frameworks**: ASI08, ASI07
+
+#### AgenticReviewAgent
+Meta-agent analysis for systems where agents review, critique, score, approve, hand off work, or delegate to other agents. Detects self-review without independent reviewer boundaries, recursive delegation without depth or budget controls, role prompts/personas without explicit policy boundaries, agent review decisions without audit trails or rationale evidence, multi-agent quorum review without model/provider diversity controls, agent output reused as downstream instructions without sanitization, reviewer agents that share privileged executor tools, shared agent identities/credentials, high-impact autonomous actions without human escalation, shared mutable memory between executor and reviewer agents, and suppressed review dissent.
+- **Phase**: Static | **Depends on**: tool_chain, agent_memory | **Frameworks**: ASI02, ASI03, ASI08
 
 #### SyntheticContentAgent
 Deepfake and synthetic content detection: AI text generation disclosure, image/video generation provenance (C2PA content credentials), voice cloning risk analysis, watermark detection, content labeling verification, detection tool assessment, metadata handling (EXIF/IPTC preservation), and synthetic content policy enforcement. Maps to EU AI Act Art. 50 transparency obligations.

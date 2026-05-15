@@ -1,5 +1,65 @@
 # AiSec Decision Log
 
+## 2026-05 — Orchestrator Integration And Agent-On-Agent Analysis
+
+### What was asked
+Review the 2026 plan, continue iterating, make AiSec easier to integrate from
+other projects, and improve analysis so agents can analyze agentic systems.
+
+### What was decided
+- Added a contract-first model-risk evaluator under `src/aisec/evaluation/`.
+- Kept integration out-of-process through CLI/container/API rather than making
+  OrchestAI import AiSec internals.
+- Made evaluator output deterministic for the same request JSON so CI and
+  governance systems can compare artifacts.
+- Treated missing AiSec binary and timeout as optional evaluator failures in the
+  subprocess adapter.
+- Added `agentic_review` as a meta-agent instead of overloading `tool_chain`,
+  `agent_memory`, or `cascade`.
+- Kept local meta-agent findings in `agentic_review` and raised impact through
+  cross-agent rules in `core/correlation.py`.
+- Added `docs/AGENT_HANDOFF.md` as the canonical handoff for another coding
+  agent integrating AiSec from a different repository.
+
+### Result
+- Model-risk protocol: `aisec.model_risk.v1`.
+- Command: `aisec evaluate model`.
+- Agents: 36.
+- Correlation rules: 40.
+- Agentic review correlation rules: 9.
+- Unit tests: 1430 passed, 14 skipped.
+
+---
+
+## 2026-02-25 — v1.10.0 Developer Experience, Audit Trail & API Maturity
+
+### What was asked
+Implement v1.10.0 across 8 phases: serve.py refactor, OpenAPI docs, audit logging, CLI commands, CSV/MD renderers, report convert, pagination/health probes, version bump.
+
+### What was decided
+- Decomposed 1,247-line `serve.py` monolith into `src/aisec/api/` package with 10 focused modules
+- Changed `ROOT_URLCONF` from `aisec.cli.serve` to `aisec.api.urls`
+- Kept backward-compatible re-exports in `serve.py` for existing dashboard/test imports
+- `AuditLogger` uses same `~/.aisec/history.db` path (added `audit_events` table)
+- Pagination uses envelope format: `{total, page, page_size, has_more, results}`
+- Swagger UI loaded from CDN (cdn.jsdelivr.net) — no bundled JS/CSS
+- Health probes follow K8s conventions: `/api/ready/` (deep check, 503 if unhealthy) vs `/api/live/` (trivial)
+- `report convert` uses fallback `_build_report_from_raw()` when `ReportBuilder.from_dict()` isn't available
+- Existing tests updated to patch new module paths (`aisec.api.scan_runner`, `aisec.api.middleware`)
+
+### Alternatives considered
+- Bundling Swagger UI assets vs CDN: chose CDN for zero-footprint, CSP already allows cdn.jsdelivr.net
+- Separate audit DB vs shared history.db: chose shared for co-location and single connection pool
+- Updating all test imports vs backward-compat re-exports: did both (re-exports + updated patches)
+
+### Result
+- 17 new source files, 8 new test files, 15 modified files
+- 1,517 tests pass (64 new), 14 skipped (optional DRF deps)
+- serve.py reduced from 1,247 to ~150 lines
+- 6 report formats (was 4): JSON, HTML, PDF, SARIF, CSV, Markdown
+
+---
+
 ## 2026-02-25 — v1.9.0 Security Hardening, Persistence & Plugin Hooks
 
 ### What was asked

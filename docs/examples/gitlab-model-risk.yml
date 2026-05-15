@@ -1,0 +1,38 @@
+stages:
+  - ai-risk
+
+variables:
+  AISEC_REQUEST: "docs/examples/orchestai-model-risk-request.json"
+  AISEC_RESULT: "aisec-results/model-risk-result.json"
+  AISEC_FAIL_ON: "critical"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+aisec:model-risk:
+  stage: ai-risk
+  image: python:3.12-slim
+  cache:
+    paths:
+      - .pip-cache/
+  before_script:
+    - python -m pip install aisec
+  script:
+    - mkdir -p "$(dirname "$AISEC_RESULT")"
+    - >
+      aisec evaluate model
+      --input "$AISEC_REQUEST"
+      --output "$AISEC_RESULT"
+      --fail-on "$AISEC_FAIL_ON"
+      --quiet
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - aisec-results/model-risk-result.json
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - ai/**/*
+        - models/**/*
+        - workflows/**/*
+        - docs/examples/*risk-request.json
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

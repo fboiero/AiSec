@@ -1,0 +1,62 @@
+{
+  "schema_version": "aisec.model_risk.v1",
+  "request_id": "tool-agent-demo-001",
+  "source": "generic-orchestrator",
+  "target": {
+    "type": "agent",
+    "name": "Operations assistant",
+    "provider": "openai",
+    "model_id": "gpt-4.1",
+    "environment": "staging",
+    "usage_context": "internal-operations-agent",
+    "capabilities": {
+      "rag_enabled": false,
+      "tools_enabled": true,
+      "memory_enabled": true,
+      "mcp_enabled": false,
+      "code_execution_enabled": true,
+      "web_access_enabled": true,
+      "fine_tuning_enabled": false,
+      "multimodal_enabled": false
+    },
+    "data_classes": [
+      "internal_docs",
+      "customer_data"
+    ],
+    "metadata": {
+      "tools": [
+        "ticket_update",
+        "database_query",
+        "shell_command"
+      ]
+    }
+  },
+  "frameworks": [
+    "owasp_llm",
+    "owasp_agentic",
+    "nist_ai_rmf",
+    "iso_42001"
+  ],
+  "context": {
+    "organization_id": "demo-org",
+    "project_id": "ops-agent",
+    "requested_by": "security-review",
+    "jurisdiction": "AR",
+    "safeguards": {
+      "pii_redaction": false,
+      "prompt_logging_disabled": false,
+      "consent_required": false,
+      "retention_policy_defined": false,
+      "human_in_loop": false,
+      "tool_approval_required": false,
+      "output_filtering": false,
+      "retrieval_filtering": false,
+      "tenant_isolation": true,
+      "audit_logging": true,
+      "rate_limiting": false
+    }
+  },
+  "policy": {
+    "fail_on": "high"
+  }
+}

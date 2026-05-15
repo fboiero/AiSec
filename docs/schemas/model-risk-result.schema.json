@@ -1,0 +1,386 @@
+{
+  "$defs": {
+    "EvaluationCapabilities": {
+      "description": "Capabilities enabled for the evaluated model or agent integration.",
+      "properties": {
+        "rag_enabled": {
+          "default": false,
+          "title": "Rag Enabled",
+          "type": "boolean"
+        },
+        "tools_enabled": {
+          "default": false,
+          "title": "Tools Enabled",
+          "type": "boolean"
+        },
+        "memory_enabled": {
+          "default": false,
+          "title": "Memory Enabled",
+          "type": "boolean"
+        },
+        "mcp_enabled": {
+          "default": false,
+          "title": "Mcp Enabled",
+          "type": "boolean"
+        },
+        "code_execution_enabled": {
+          "default": false,
+          "title": "Code Execution Enabled",
+          "type": "boolean"
+        },
+        "web_access_enabled": {
+          "default": false,
+          "title": "Web Access Enabled",
+          "type": "boolean"
+        },
+        "fine_tuning_enabled": {
+          "default": false,
+          "title": "Fine Tuning Enabled",
+          "type": "boolean"
+        },
+        "multimodal_enabled": {
+          "default": false,
+          "title": "Multimodal Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "EvaluationCapabilities",
+      "type": "object"
+    },
+    "EvaluationEvidence": {
+      "description": "Evidence item generated or forwarded during evaluation.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "location": {
+          "default": "",
+          "title": "Location",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "summary"
+      ],
+      "title": "EvaluationEvidence",
+      "type": "object"
+    },
+    "EvaluationFinding": {
+      "description": "Normalized finding returned to the orchestrator.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "frameworks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Frameworks",
+          "type": "array"
+        },
+        "owasp_llm": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Owasp Llm",
+          "type": "array"
+        },
+        "owasp_agentic": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Owasp Agentic",
+          "type": "array"
+        },
+        "nist_ai_rmf": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Nist Ai Rmf",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvaluationEvidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "remediation": {
+          "default": "",
+          "title": "Remediation",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "severity"
+      ],
+      "title": "EvaluationFinding",
+      "type": "object"
+    },
+    "EvaluationTarget": {
+      "description": "Model, agent, RAG pipeline, or workflow being evaluated.",
+      "properties": {
+        "type": {
+          "default": "model",
+          "enum": [
+            "model",
+            "agent",
+            "rag_pipeline",
+            "workflow"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "default": "",
+          "title": "Provider",
+          "type": "string"
+        },
+        "model_id": {
+          "default": "",
+          "title": "Model Id",
+          "type": "string"
+        },
+        "environment": {
+          "default": "unknown",
+          "title": "Environment",
+          "type": "string"
+        },
+        "usage_context": {
+          "default": "",
+          "title": "Usage Context",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/EvaluationCapabilities"
+        },
+        "data_classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Data Classes",
+          "type": "array"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EvaluationTarget",
+      "type": "object"
+    },
+    "FrameworkResult": {
+      "description": "Framework-level rollup for the evaluated target.",
+      "properties": {
+        "framework": {
+          "title": "Framework",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warn",
+            "fail"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "score": {
+          "default": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "finding_count": {
+          "default": 0,
+          "title": "Finding Count",
+          "type": "integer"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "framework",
+        "status"
+      ],
+      "title": "FrameworkResult",
+      "type": "object"
+    },
+    "PolicyVerdict": {
+      "description": "Optional gate-style result for CI/CD or approval workflows.",
+      "properties": {
+        "status": {
+          "enum": [
+            "pass",
+            "warn",
+            "fail"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "PolicyVerdict",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "description": "Output contract consumed by OrchestAI compliance flows.",
+  "properties": {
+    "schema_version": {
+      "default": "aisec.model_risk.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "evaluation_id": {
+      "title": "Evaluation Id",
+      "type": "string"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "engine": {
+      "default": "aisec",
+      "title": "Engine",
+      "type": "string"
+    },
+    "engine_version": {
+      "default": "",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/EvaluationTarget"
+    },
+    "overall_risk": {
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "title": "Overall Risk",
+      "type": "string"
+    },
+    "risk_score": {
+      "title": "Risk Score",
+      "type": "number"
+    },
+    "frameworks": {
+      "items": {
+        "$ref": "#/$defs/FrameworkResult"
+      },
+      "title": "Frameworks",
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/EvaluationFinding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvaluationEvidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "recommendations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Recommendations",
+      "type": "array"
+    },
+    "policy_verdict": {
+      "$ref": "#/$defs/PolicyVerdict"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "request_id",
+    "target",
+    "overall_risk",
+    "risk_score",
+    "policy_verdict"
+  ],
+  "title": "ModelRiskEvaluationResult",
+  "type": "object"
+}

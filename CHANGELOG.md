@@ -5,6 +5,54 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-02-25
+
+### Added
+- **Model-Risk Evaluator** — Added `aisec evaluate model` with
+  `ModelRiskEvaluationRequest` and `ModelRiskEvaluationResult` contracts for
+  OrchestAI-style integrations. Results are deterministic for the same request
+  JSON and include framework rollups, findings, evidence, recommendations, and
+  policy verdicts.
+- **Model-Risk Schema Export** — Added `aisec evaluate schema` and JSON schemas
+  under `docs/schemas/`.
+- **Orchestrator Integration Docs** — Added `docs/orchestai-integration-protocol.md`,
+  `docs/AGENT_HANDOFF.md`, example request/result JSON, subprocess adapter, and
+  GitHub Actions/GitLab CI model-risk templates.
+- **AgenticReviewAgent** — Added the `agentic_review` static agent for
+  agent-on-agent analysis: self-review, recursive delegation, role-policy
+  boundaries, audit trails, quorum diversity, unsafe handoffs, reviewer tool
+  separation, shared identities, human escalation, shared review memory, and
+  suppressed dissent.
+- **Agentic Correlation Rules** — Added 9 correlation rules centered on
+  `agentic_review`, bringing total correlation rules to 40.
+- **serve.py Refactor** — Decomposed 1,247-line monolith into `src/aisec/api/` package with 10 focused modules (config, auth, throttle, middleware, serializers, views, urls, scan_runner, wsgi, schema, health). `serve.py` is now a ~150-line thin CLI wrapper.
+- **OpenAPI Documentation** — Swagger UI at `/api/docs/` and JSON schema at `/api/schema/` via DRF `SchemaGenerator`.
+- **Audit Logging** — New `AuditLogger` class with SQLite `audit_events` table tracking `scan.created`, `scan.cancelled`, `scan.deleted`, `webhook.created`, `webhook.deleted`. Queryable via `GET /api/audit/` (paginated, filterable by action/resource_type).
+- **CLI: `scan list`** — List scan history from local SQLite database with Rich table output.
+- **CLI: `scan show`** — Display detailed scan information with findings table (supports ID prefix matching).
+- **CLI: `scan compare`** — Compare two scans showing new and resolved findings in diff tables.
+- **CLI: `scan export`** — Export scan findings to JSON, CSV, or Markdown format.
+- **CLI: `agents list`** — List all 36 registered agents with phase, description, frameworks, and dependencies.
+- **CLI: `agents info`** — Show detailed information about a specific agent.
+- **CLI: `plugins list/info`** — Replaced hardcoded placeholder data with real `discover_plugins()` entry point discovery.
+- **CSV Report Renderer** — Flattens findings to tabular rows with `csv.DictWriter` (14 columns).
+- **Markdown Report Renderer** — Structured Markdown with Executive Summary, Risk Overview, Findings by Agent, Correlated Risks.
+- **Report Convert Implementation** — `aisec report convert` now supports json→html, json→pdf, json→csv, json→md, json→sarif (was placeholder).
+- **API Pagination** — All list endpoints return `{"total", "page", "page_size", "has_more", "results"}` envelope.
+- **Readiness Probe** — `GET /api/ready/` checks SQLite connectivity and executor health (returns 503 if unhealthy).
+- **Liveness Probe** — `GET /api/live/` returns `{"status": "alive"}` for Kubernetes liveness checks.
+- **6 Report Formats** — JSON, HTML, PDF, SARIF, CSV, and Markdown.
+
+### Changed
+- `ROOT_URLCONF` changed from `aisec.cli.serve` to `aisec.api.urls`
+- Dashboard imports updated from `aisec.cli.serve` to `aisec.api.scan_runner`
+- `ScanHistory` schema now includes `audit_events` table with indexes
+- `ScanHistory.count_scan_reports()` method added for pagination support
+- Agent count changed from 35 to 36.
+- Correlation rules changed from 31 to 40.
+- Removed duplicate untracked test files ending in ` 2.py` before release
+  preparation.
+
 ## [1.9.0] - 2026-02-25
 
 ### Added

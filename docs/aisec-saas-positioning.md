@@ -1,220 +1,283 @@
-# AiSec SaaS — Plataforma de Seguridad para Sistemas de IA Autonomos
+# AiSec Product Positioning
 
-> Documento de posicionamiento estrategico — Febrero 2026
-
----
+> Strategic positioning updated for the OrchestAI integration path - May 2026
 
 ## Vision
 
-**AiSec Cloud** es la primera plataforma SaaS de seguridad disenada exclusivamente para sistemas de IA autonomos. Mientras las herramientas tradicionales (Snyk, Trivy, Wiz, Prisma Cloud) se enfocan en vulnerabilidades de infraestructura y codigo, AiSec analiza los vectores de ataque unicos de agentes de IA: prompt injection, envenenamiento de RAG, explotacion de MCP, hijacking de tool chains, fuga de embeddings, fallas en cascada multi-agente, y mas.
+AiSec is the risk and compliance evaluation layer for AI orchestration
+platforms.
 
----
+It helps products such as OrchestAI evaluate the models, providers, agents, RAG
+pipelines, tools, memory, and workflows they orchestrate. AiSec can also run as
+a standalone scanner for deeper security audits, but the primary product
+direction is integration: make AI risk measurable inside the platforms where
+models are selected, approved, routed, and monitored.
 
-## El problema de mercado
+## Category
 
-### La explosion de agentes de IA autonomos
+AiSec sits between three existing categories:
 
-- **OpenClaw**: 191.000 estrellas en GitHub, 312.000+ instancias desplegadas en semanas
-- **Mercado de agentes de IA**: Proyectado a $65B para 2028 (McKinsey)
-- **Cada empresa Fortune 500** esta evaluando o desplegando agentes internos
-- **Frameworks agenticos** (LangChain, CrewAI, AutoGPT, LlamaIndex) crecen 300% anual
+- Application security scanners.
+- AI governance/compliance tools.
+- AI observability/model operations platforms.
 
-### El gap de seguridad
+The differentiated category is:
 
-- **Las herramientas existentes no entienden IA**: Trivy encuentra CVEs de paquetes, no prompt injection
-- **Los pentesters no escalan**: Un pentest manual de un agente toma semanas y cuesta $50-100K
-- **Las regulaciones se endurecen**: EU AI Act (vigente), NIST AI 600-1 (vigente), ISO 42001 (adoptandose)
-- **Los incidentes crecen exponencialmente**: Solo OpenClaw tuvo 512 vulnerabilidades, 30K instancias expuestas, 824 skills maliciosos en un mes
-
-### El caso OpenClaw como catalizador
-
-OpenClaw demostro al mundo que los agentes de IA autonomos son un vector de ataque masivo. Cada CISO ahora pregunta: "Nuestros agentes internos, estan seguros?" La respuesta es: no lo saben, porque no tienen herramientas para medirlo.
-
----
-
-## La solucion: AiSec Cloud
-
-### Producto core
-
-Una plataforma SaaS que ejecuta analisis de seguridad continuo sobre sistemas de IA autonomos:
-
-```
-Desarrollador/DevSecOps → Conecta agente/imagen → AiSec ejecuta 35 agentes de seguridad
-→ Dashboard con hallazgos → Auto-remediacion con patches → Policy gate en CI/CD
-→ Monitoreo runtime continuo → Reportes de cumplimiento automaticos
+```text
+AI Risk Evaluation Engine for Model Orchestrators
 ```
 
-### Tiers
+Longer-term, this becomes part of:
 
-| Plan | Precio | Incluye |
-|------|--------|---------|
-| **Community** | Gratis | CLI open-source, 35 agentes, reportes locales, 1 escaneo/dia |
-| **Team** | $499/mes | 10 proyectos, dashboard web, API, 50 escaneos/dia, historico 90 dias, 3 usuarios |
-| **Business** | $1.999/mes | Proyectos ilimitados, escaneos ilimitados, SSO/SAML, webhooks, politicas custom, runtime monitoring, cumplimiento automatizado, 10 usuarios |
-| **Enterprise** | Custom | On-premise/VPC, SLA 99.9%, soporte dedicado, integraciones custom, auditorias trimestrales, usuarios ilimitados |
+```text
+AI Security Posture Management
+```
 
-### Diferenciadores clave
+## Problem
 
-| Capacidad | AiSec | Snyk | Trivy | Wiz |
-|-----------|-------|------|-------|-----|
-| Prompt injection detection | 35+ patrones | No | No | No |
-| RAG pipeline security | Si | No | No | No |
-| MCP server hardening | Si | No | No | No |
-| Tool chain sandboxing audit | Si | No | No | No |
-| Agent memory security | Si | No | No | No |
-| Multi-agent cascade analysis | Si | No | No | No |
-| OWASP LLM Top 10 | Completo | Parcial | No | No |
-| OWASP Agentic Top 10 | Completo | No | No | No |
-| EU AI Act compliance | 22 checks | No | No | No |
-| Auto-remediacion con codigo | Si | Si | No | Si (IaC) |
-| Runtime monitoring (eBPF) | Si | No | No | Si |
-| AI-CVSS scoring | Si | No | No | No |
+AI orchestration platforms decide which model, provider, tool, RAG collection,
+and workflow should handle a request. That decision is increasingly regulated
+and security-sensitive.
 
-### Integraciones
+The platform needs to know:
 
-- **CI/CD**: GitHub Actions, GitLab CI, Jenkins, Azure DevOps, CircleCI
-- **Cloud**: AWS, GCP, Azure (reportes a S3/GCS/Blob)
-- **Contenedores**: Docker, Kubernetes, Helm
-- **Monitoreo**: Prometheus, Grafana, PagerDuty, OpsGenie
-- **Comunicacion**: Slack, Teams, Discord (notificaciones)
-- **Compliance**: SARIF (GitHub Code Scanning), PDF/HTML reportes
+- What data classes does this model route process?
+- Which provider receives the data?
+- Is RAG enabled?
+- Are retrieved documents filtered?
+- Can the model call tools or MCP servers?
+- Is memory enabled?
+- Are PII redaction, retention, audit logging, rate limiting, and tenant
+  isolation active?
+- Which compliance frameworks are affected?
+- Can the result be stored as evidence?
 
----
+Traditional scanners do not answer those questions. Manual assessments do not
+scale. A compliance module needs a machine-readable evaluator.
 
-## Go-to-Market
+## Solution
 
-### Fase 1 — Community & Awareness (Q1 2026) ← ESTAMOS ACA
+AiSec accepts a descriptor of the AI target and returns normalized risk evidence.
 
-**Objetivo**: Establecer AiSec como el estandar open-source de seguridad para IA.
+```text
+Orchestrator
+  -> ModelRiskEvaluationRequest
+  -> AiSec
+  -> ModelRiskEvaluationResult
+  -> Governance / approval / audit / CI policy
+```
 
-- **Open-source momentum**: 35 agentes, 1.453 tests, 8 frameworks de cumplimiento
-- **Content marketing**: Blog post de OpenClaw como caso de estudio (viral potential)
-- **Developer relations**: Documentacion, quickstart, plugin development guide
-- **GitHub Action**: `uses: fboiero/AiSec@v1` — zero friction adoption
-- **Partnerships**: Xcapit como primer caso de uso enterprise
+The same engine can optionally trigger deeper scans for Dockerized agents,
+runtime behavior, RAG implementations, MCP servers, and infrastructure.
 
-### Fase 2 — SaaS Beta (Q2 2026)
+## First Integration Target
 
-**Objetivo**: Lanzar AiSec Cloud con early adopters.
+The first target integration is OrchestAI:
 
-- **Infraestructura**: Multi-tenant en AWS/GCP con Kubernetes
-- **Dashboard web**: Ya construido (v1.6), migrar a multi-tenant
-- **API**: Ya construida (v1.0+), agregar autenticacion por org
-- **Onboarding**: `aisec cloud connect` CLI command
-- **Pricing**: Free tier + Team ($499) para beta
-- **Target**: 50 equipos beta, 500 escaneos/semana
+```text
+git@gitlab.com:xcapit/orchestai.git
+```
 
-### Fase 3 — General Availability (Q3 2026)
+In OrchestAI, AiSec should appear as an optional evaluator in the compliance
+module:
 
-**Objetivo**: Lanzamiento publico con todos los tiers.
+```text
+Compliance Evaluators
+  - Internal baseline evaluator
+  - Privacy evaluator
+  - Drift/quality evaluator
+  - AiSec advanced AI security evaluator
+```
 
-- **Enterprise features**: SSO/SAML, audit log, role-based access, VPC deployment
-- **Marketplace**: Plugin marketplace para agentes custom
-- **Compliance certifications**: SOC 2 Type II, ISO 27001 (aprovechando Xcapit)
-- **Channel partnerships**: Consultoras de seguridad, MSSPs
+## Product Surfaces
 
-### Fase 4 — Scale (Q4 2026+)
+### 1. Embedded Evaluation
 
-**Objetivo**: Escalar a 1.000+ clientes.
+Command:
 
-- **Runtime agent**: Lightweight sidecar que monitorea agentes de IA en produccion 24/7
-- **AI Security Posture Management (AI-SPM)**: Vista unificada de todos los agentes de IA en la organizacion
-- **Threat intelligence**: Feed de skills maliciosos, patrones de ataque, IoCs
-- **Acquisitions**: Herramientas complementarias (fuzzing, model security)
+```bash
+aisec evaluate model --input request.json --output result.json
+```
 
----
+Use cases:
 
-## Mercado objetivo
+- Model approval.
+- Provider onboarding.
+- RAG workflow review.
+- Tool/MCP risk review.
+- Tenant-specific compliance evidence.
+- CI advisory or blocking gate.
 
-### Segmento primario: Empresas con agentes de IA en produccion
+### 2. Deep Scan
 
-- **Perfil**: Equipos de 50-500 ingenieros, 5-50 agentes de IA desplegados
-- **Pain point**: "No sabemos si nuestros agentes son seguros, y la regulacion nos exige demostrarlo"
-- **Decision maker**: CISO / VP Engineering / Head of AI
-- **Budget**: $50K-200K/anio en herramientas de seguridad
+Command:
 
-### Segmento secundario: Startups de IA
+```bash
+aisec scan run myagent:latest --format json,html,sarif
+```
 
-- **Perfil**: 5-50 ingenieros, construyendo productos basados en agentes
-- **Pain point**: "Necesitamos pasar auditorias de seguridad para cerrar enterprise deals"
-- **Decision maker**: CTO / CEO
-- **Budget**: $5K-50K/anio
+Use cases:
 
-### Segmento terciario: Consultoras de seguridad
+- Containerized agent audit.
+- Runtime monitoring.
+- Supply chain and infra checks.
+- Advanced security assessment.
 
-- **Perfil**: Firmas de pentest y seguridad que necesitan tooling para IA
-- **Pain point**: "Nuestros clientes nos piden pentests de sus agentes de IA y no tenemos herramientas"
-- **Decision maker**: Managing Partner / Practice Lead
-- **Budget**: License + revenue share
+### 3. API/Dashboard
 
----
+Command:
 
-## Modelo de negocio
+```bash
+aisec serve
+```
 
-### Revenue streams
+Use cases:
 
-1. **SaaS subscriptions** (80%) — Recurrente mensual/anual
-2. **Professional services** (15%) — Implementacion, integracion custom, capacitacion
-3. **Marketplace fees** (5%) — Comision sobre plugins/agentes premium
+- Centralized evaluation service.
+- Dashboard.
+- Scheduled scans.
+- Webhooks.
+- Metrics and audit history.
 
-### Unit economics objetivo (Q4 2026)
+## Differentiators
 
-| Metrica | Target |
-|---------|--------|
-| ARR | $2M |
-| Clientes pagos | 200 |
-| ARPU | $10K/anio |
-| Churn mensual | <3% |
-| CAC | <$5K |
-| LTV/CAC | >5x |
-| Gross margin | >80% |
+| Capability | AiSec | Generic SAST/SCA | AI observability | Manual compliance |
+| --- | --- | --- | --- | --- |
+| Model/provider risk descriptor | Yes | No | Partial | Manual |
+| RAG security mapping | Yes | No | Partial | Manual |
+| Tool/MCP/agentic risk | Yes | No | Partial | Manual |
+| Privacy and PII safeguards | Yes | Partial | Partial | Manual |
+| OWASP LLM/Agentic mapping | Yes | No | No | Manual |
+| NIST AI RMF / ISO 42001 evidence | Yes | No | Partial | Manual |
+| CLI/CI/CD gate | Yes | Yes | Rare | No |
+| Deep Docker agent scan | Yes | Partial | No | Manual |
+| Machine-readable evidence | Yes | Partial | Partial | Often no |
 
-### Funding
+## Target Customers
 
-- **Pre-seed**: Bootstrapped (open-source + Xcapit revenue)
-- **Seed** (Q2 2026): $1-2M para infraestructura SaaS, equipo de 5, y go-to-market
-- **Series A** (Q1 2027): $8-15M para escalar, enterprise sales team, SOC 2
+### Primary: AI Platform Teams
 
----
+Teams building internal or commercial AI orchestration products.
 
-## Ventaja competitiva sostenible
+Need:
 
-1. **First mover en AI agent security**: No existe otra herramienta que cubra los 10 vectores agenticos
-2. **Open-source core**: Comunidad de desarrolladores contribuyendo agentes, detecciones, y frameworks
-3. **Data moat**: Cada escaneo enriquece nuestros patrones de deteccion (anonimizado)
-4. **Compliance depth**: 8 frameworks mapeados con trazabilidad articulo-por-articulo
-5. **Ecosystem lock-in**: Policy-as-code en CI/CD, dashboard integrado, runtime monitoring — dificil de reemplazar una vez adoptado
-6. **Xcapit backing**: ISO 27001, clientes enterprise (UNICEF, Polygon, Santander), credibilidad en seguridad
+- Pluggable model-risk evaluator.
+- Evidence for model/provider/workflow approval.
+- CI and governance integration.
+- Clear framework mappings.
 
----
+### Secondary: DevSecOps for AI Products
 
-## Equipo necesario (Seed)
+Teams shipping RAG, agents, MCP servers, and LLM-powered workflows.
 
-| Rol | Responsabilidad |
-|-----|-----------------|
-| **CEO/CTO** (Federico Boiero) | Vision, arquitectura, producto |
-| **Backend Engineer** | Multi-tenancy, API, infra |
-| **Frontend Engineer** | Dashboard SaaS, onboarding |
-| **Security Researcher** | Nuevos agentes, detecciones, research |
-| **DevRel / Marketing** | Content, community, partnerships |
+Need:
 
----
+- CI gate.
+- SARIF/JSON artifacts.
+- Findings with remediation.
+- Minimal adoption friction.
 
-## Metricas de traccion actual
+### Tertiary: Security and Compliance Teams
 
-| Metrica | Valor |
-|---------|-------|
-| Version | 1.9.0 |
-| Agentes de seguridad | 35 |
-| Reglas de correlacion | 31 |
-| Tests | 1.453 |
-| Lineas de codigo | ~38.700 |
-| Frameworks de cumplimiento | 8 |
-| Estrategias de remediacion | 16+ |
-| Opciones de deploy | 10 (CLI, API, Docker, K8s, Helm, GH Action, etc.) |
-| Releases en 9 dias | 11 (v0.1 → v1.9) |
+Teams that need evidence for AI governance programs.
 
----
+Need:
 
-*Documento preparado por Federico Boiero — Febrero 2026*
-*Confidencial — Para uso interno y potenciales inversores*
+- NIST AI RMF / ISO 42001 / GDPR / Habeas Data evidence.
+- Historical evaluations.
+- Risk trends.
+- Exception and acceptance workflows.
+
+## Packaging Direction
+
+### Open Source Core
+
+- CLI.
+- Local evaluator.
+- Deep scan engine.
+- JSON outputs.
+- Basic reports.
+- GitLab/GitHub examples.
+
+### Team / Platform
+
+- Central API.
+- Evaluation history.
+- Project/workspace configuration.
+- CI integration templates.
+- Baseline comparison.
+
+### Enterprise / Managed
+
+- Multi-tenant service.
+- SSO/RBAC.
+- Approval workflows.
+- Exception management.
+- Evidence packs.
+- Runtime integrations.
+- On-prem/VPC deployment.
+
+## 2026 Go-To-Market
+
+### Phase 1: OrchestAI Integration
+
+Goal: prove AiSec as an optional compliance evaluator inside a real model
+orchestrator.
+
+Deliverables:
+
+- Stable protocol.
+- OrchestAI adapter.
+- Evaluation artifacts.
+- Governance/evidence flow.
+
+### Phase 2: Reusable Orchestrator Pattern
+
+Goal: make the same pattern usable by other products.
+
+Deliverables:
+
+- Generic docs.
+- JSON Schema.
+- Reference adapters.
+- Profiles for model, RAG, agent, workflow.
+
+### Phase 3: CI/CD Adoption
+
+Goal: make risk evaluation part of AI delivery pipelines.
+
+Deliverables:
+
+- GitLab CI template.
+- GitHub Action template.
+- Policy gates.
+- MR/PR summary artifacts.
+
+### Phase 4: Posture and Evidence Platform
+
+Goal: aggregate evaluations into AI security posture.
+
+Deliverables:
+
+- Evaluation history.
+- Baseline diff.
+- Trends.
+- Exception workflows.
+- Framework evidence exports.
+
+## Metrics
+
+| Metric | Target |
+| --- | --- |
+| Time to integrate first evaluator | < 1 day |
+| Time to run descriptor evaluation | < 10 seconds |
+| Result schema stability | No breaking minor changes |
+| Finding explainability | 100% with evidence + remediation |
+| Framework mapping coverage | OWASP LLM, OWASP Agentic, NIST AI RMF, ISO 42001, GDPR, Habeas Data |
+
+## Positioning Statement
+
+AiSec is an optional AI risk and compliance evaluator for platforms that
+orchestrate models, agents, RAG, tools, and workflows. It turns configuration
+and runtime context into machine-readable findings, framework mappings, policy
+verdicts, and audit evidence.

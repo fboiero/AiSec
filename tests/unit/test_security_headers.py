@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 class TestSecurityHeaders:
     def _make_middleware_call(self, env_vars=None):
         """Helper to invoke CorsMiddleware and return the response."""
-        from aisec.cli.serve import CorsMiddleware
+        from aisec.api.middleware import CorsMiddleware
 
         mock_response = MagicMock()
         mock_response.__setitem__ = MagicMock()
@@ -59,7 +59,7 @@ class TestSecurityHeaders:
 
     def test_hsts_only_on_secure(self):
         """HSTS header should only be set when request.is_secure() is True."""
-        from aisec.cli.serve import CorsMiddleware
+        from aisec.api.middleware import CorsMiddleware
 
         mock_response = MagicMock()
         mock_response.__setitem__ = MagicMock()
@@ -92,7 +92,7 @@ class TestSecurityHeaders:
         assert set_headers.get("Access-Control-Allow-Origin") == "*"
 
     def test_cors_specific_origin(self):
-        from aisec.cli.serve import CorsMiddleware
+        from aisec.api.middleware import CorsMiddleware
 
         mock_response = MagicMock()
         mock_response.__setitem__ = MagicMock()

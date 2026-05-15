@@ -1,0 +1,248 @@
+{
+  "$defs": {
+    "EvaluationCapabilities": {
+      "description": "Capabilities enabled for the evaluated model or agent integration.",
+      "properties": {
+        "rag_enabled": {
+          "default": false,
+          "title": "Rag Enabled",
+          "type": "boolean"
+        },
+        "tools_enabled": {
+          "default": false,
+          "title": "Tools Enabled",
+          "type": "boolean"
+        },
+        "memory_enabled": {
+          "default": false,
+          "title": "Memory Enabled",
+          "type": "boolean"
+        },
+        "mcp_enabled": {
+          "default": false,
+          "title": "Mcp Enabled",
+          "type": "boolean"
+        },
+        "code_execution_enabled": {
+          "default": false,
+          "title": "Code Execution Enabled",
+          "type": "boolean"
+        },
+        "web_access_enabled": {
+          "default": false,
+          "title": "Web Access Enabled",
+          "type": "boolean"
+        },
+        "fine_tuning_enabled": {
+          "default": false,
+          "title": "Fine Tuning Enabled",
+          "type": "boolean"
+        },
+        "multimodal_enabled": {
+          "default": false,
+          "title": "Multimodal Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "EvaluationCapabilities",
+      "type": "object"
+    },
+    "EvaluationContext": {
+      "description": "Execution context provided by OrchestAI or another orchestrator.",
+      "properties": {
+        "organization_id": {
+          "default": "",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "project_id": {
+          "default": "",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "requested_by": {
+          "default": "",
+          "title": "Requested By",
+          "type": "string"
+        },
+        "jurisdiction": {
+          "default": "",
+          "title": "Jurisdiction",
+          "type": "string"
+        },
+        "safeguards": {
+          "$ref": "#/$defs/EvaluationSafeguards"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "title": "EvaluationContext",
+      "type": "object"
+    },
+    "EvaluationSafeguards": {
+      "description": "Controls already present in the consuming platform.",
+      "properties": {
+        "pii_redaction": {
+          "default": false,
+          "title": "Pii Redaction",
+          "type": "boolean"
+        },
+        "prompt_logging_disabled": {
+          "default": false,
+          "title": "Prompt Logging Disabled",
+          "type": "boolean"
+        },
+        "consent_required": {
+          "default": false,
+          "title": "Consent Required",
+          "type": "boolean"
+        },
+        "retention_policy_defined": {
+          "default": false,
+          "title": "Retention Policy Defined",
+          "type": "boolean"
+        },
+        "human_in_loop": {
+          "default": false,
+          "title": "Human In Loop",
+          "type": "boolean"
+        },
+        "tool_approval_required": {
+          "default": false,
+          "title": "Tool Approval Required",
+          "type": "boolean"
+        },
+        "output_filtering": {
+          "default": false,
+          "title": "Output Filtering",
+          "type": "boolean"
+        },
+        "retrieval_filtering": {
+          "default": false,
+          "title": "Retrieval Filtering",
+          "type": "boolean"
+        },
+        "tenant_isolation": {
+          "default": false,
+          "title": "Tenant Isolation",
+          "type": "boolean"
+        },
+        "audit_logging": {
+          "default": false,
+          "title": "Audit Logging",
+          "type": "boolean"
+        },
+        "rate_limiting": {
+          "default": false,
+          "title": "Rate Limiting",
+          "type": "boolean"
+        }
+      },
+      "title": "EvaluationSafeguards",
+      "type": "object"
+    },
+    "EvaluationTarget": {
+      "description": "Model, agent, RAG pipeline, or workflow being evaluated.",
+      "properties": {
+        "type": {
+          "default": "model",
+          "enum": [
+            "model",
+            "agent",
+            "rag_pipeline",
+            "workflow"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "default": "",
+          "title": "Provider",
+          "type": "string"
+        },
+        "model_id": {
+          "default": "",
+          "title": "Model Id",
+          "type": "string"
+        },
+        "environment": {
+          "default": "unknown",
+          "title": "Environment",
+          "type": "string"
+        },
+        "usage_context": {
+          "default": "",
+          "title": "Usage Context",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/EvaluationCapabilities"
+        },
+        "data_classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Data Classes",
+          "type": "array"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EvaluationTarget",
+      "type": "object"
+    }
+  },
+  "description": "Input contract for optional model-risk evaluation.",
+  "properties": {
+    "schema_version": {
+      "default": "aisec.model_risk.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "source": {
+      "default": "orchestai",
+      "title": "Source",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/EvaluationTarget"
+    },
+    "frameworks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Frameworks",
+      "type": "array"
+    },
+    "context": {
+      "$ref": "#/$defs/EvaluationContext"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "title": "Policy",
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "title": "ModelRiskEvaluationRequest",
+  "type": "object"
+}

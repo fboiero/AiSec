@@ -92,6 +92,7 @@ async def _run_scan(
     from aisec.plugins.loader import discover_plugins
     from aisec.reports.builder import ReportBuilder
     from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer, sarif_renderer
+    from aisec.reports.renderers import csv_renderer, md_renderer
 
     ctx = ScanContext(
         target_image=image,
@@ -217,6 +218,12 @@ async def _run_scan(
             elif fmt == "sarif":
                 path = sarif_renderer.render(report, output_dir / f"{base_name}.sarif")
                 rendered_files.append(path)
+            elif fmt == "csv":
+                path = csv_renderer.render(report, output_dir / f"{base_name}.csv")
+                rendered_files.append(path)
+            elif fmt in ("md", "markdown"):
+                path = md_renderer.render(report, output_dir / f"{base_name}.md")
+                rendered_files.append(path)
             else:
                 console.print(f"[warning]Unknown format: {fmt}[/warning]")
         except Exception as exc:
@@ -255,6 +262,7 @@ async def _run_scan_with_dashboard(
     from aisec.plugins.loader import discover_plugins
     from aisec.reports.builder import ReportBuilder
     from aisec.reports.renderers import json_renderer, html_renderer, pdf_renderer, sarif_renderer
+    from aisec.reports.renderers import csv_renderer, md_renderer
 
     ctx = ScanContext(
         target_image=image,
@@ -350,6 +358,12 @@ async def _run_scan_with_dashboard(
                 rendered_files.append(path)
             elif fmt == "sarif":
                 path = sarif_renderer.render(report, output_dir / f"{base_name}.sarif")
+                rendered_files.append(path)
+            elif fmt == "csv":
+                path = csv_renderer.render(report, output_dir / f"{base_name}.csv")
+                rendered_files.append(path)
+            elif fmt in ("md", "markdown"):
+                path = md_renderer.render(report, output_dir / f"{base_name}.md")
                 rendered_files.append(path)
             else:
                 console.print(f"[warning]Unknown format: {fmt}[/warning]")
@@ -541,3 +555,208 @@ def scan(
 
     if len(images) > 1:
         console.print(f"[bold green]All {len(images)} targets scanned.[/bold green]")
+
+
+@scan_app.command("list")
+def scan_list(
+    target: Optional[str] = typer.Option(  # noqa: UP007
+        None, "--target", "-t", help="Filter by target image."
+    ),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results."),
+) -> None:
+    """List scan history from the local database."""
+    from aisec.core.history import ScanHistory
+
+    history = ScanHistory()
+    try:
+        scans = history.list_scans(target_image=target, limit=limit)
+        if not scans:
+            console.print("[dim]No scans found.[/dim]")
+            return
+
+        table = Table(title=f"Scan History ({len(scans)} scans)")
+        table.add_column("Scan ID", style="bold", no_wrap=True)
+        table.add_column("Target")
+        table.add_column("Date")
+        table.add_column("Findings", justify="right")
+        table.add_column("Risk Level")
+
+        for s in scans:
+            scan_id = s["scan_id"][:12]
+            target_img = s.get("target_image", "")
+            date = s.get("started_at", "")[:19]
+            findings = str(s.get("total_findings", 0))
+            risk = s.get("overall_risk_level", "unknown")
+            table.add_row(scan_id, target_img, date, findings, risk)
+
+        console.print(table)
+    finally:
+        history.close()
+
+
+@scan_app.command("show")
+def scan_show(
+    scan_id: str = typer.Argument(..., help="Scan ID (or prefix) to display."),
+) -> None:
+    """Show detailed information about a specific scan."""
+    from aisec.core.history import ScanHistory
+
+    history = ScanHistory()
+    try:
+        scan = history.get_scan(scan_id)
+        if not scan:
+            # Try prefix match
+            all_scans = history.list_scans(limit=500)
+            matches = [s for s in all_scans if s["scan_id"].startswith(scan_id)]
+            if len(matches) == 1:
+                scan = matches[0]
+                scan_id = scan["scan_id"]
+            elif len(matches) > 1:
+                console.print(f"[warning]Multiple scans match prefix '{scan_id}':[/warning]")
+                for m in matches:
+                    console.print(f"  {m['scan_id'][:12]}  {m.get('target_image', '')}")
+                return
+            else:
+                console.print(f"[error]Scan not found:[/error] {scan_id}")
+                raise typer.Exit(code=1)
+
+        findings = history.get_findings(scan_id)
+
+        info_text = (
+            f"[bold]Scan ID:[/bold]      {scan['scan_id']}\n"
+            f"[bold]Target:[/bold]       {scan.get('target_image', '')}\n"
+            f"[bold]Started:[/bold]      {scan.get('started_at', '')}\n"
+            f"[bold]Duration:[/bold]     {scan.get('duration_seconds', 0):.1f}s\n"
+            f"[bold]Findings:[/bold]     {scan.get('total_findings', 0)}\n"
+            f"[bold]Risk Level:[/bold]   {scan.get('overall_risk_level', 'unknown')}\n"
+            f"[bold]Risk Score:[/bold]   {scan.get('ai_risk_score', 0):.1f}\n"
+            f"[bold]Compliance:[/bold]   {scan.get('compliance_score', 0):.0f}%\n"
+            f"[bold]Critical:[/bold]     {scan.get('critical_count', 0)}\n"
+            f"[bold]High:[/bold]         {scan.get('high_count', 0)}\n"
+            f"[bold]Medium:[/bold]       {scan.get('medium_count', 0)}\n"
+            f"[bold]Low:[/bold]          {scan.get('low_count', 0)}"
+        )
+        console.print(Panel(info_text, title=f"Scan {scan_id[:12]}", style="info"))
+
+        if findings:
+            ftable = Table(title=f"Findings ({len(findings)})")
+            ftable.add_column("Severity", style="bold")
+            ftable.add_column("Agent")
+            ftable.add_column("Title")
+            ftable.add_column("Status")
+
+            for f in findings:
+                ftable.add_row(
+                    f.get("severity", ""),
+                    f.get("agent", ""),
+                    f.get("title", "")[:60],
+                    f.get("status", ""),
+                )
+            console.print(ftable)
+    finally:
+        history.close()
+
+
+@scan_app.command("compare")
+def scan_compare(
+    scan_a: str = typer.Argument(..., help="Previous scan ID."),
+    scan_b: str = typer.Argument(..., help="Current scan ID."),
+) -> None:
+    """Compare two scans to show new and resolved findings."""
+    from aisec.core.history import ScanHistory
+
+    history = ScanHistory()
+    try:
+        new_findings = history.get_new_findings(scan_b, scan_a)
+        resolved_findings = history.get_resolved_findings(scan_b, scan_a)
+
+        if new_findings:
+            table = Table(title=f"New Findings ({len(new_findings)})", style="error")
+            table.add_column("Severity")
+            table.add_column("Agent")
+            table.add_column("Title")
+            for f in new_findings:
+                table.add_row(f.get("severity", ""), f.get("agent", ""), f.get("title", "")[:60])
+            console.print(table)
+        else:
+            console.print("[success]No new findings.[/success]")
+
+        if resolved_findings:
+            table = Table(title=f"Resolved Findings ({len(resolved_findings)})", style="success")
+            table.add_column("Severity")
+            table.add_column("Agent")
+            table.add_column("Title")
+            for f in resolved_findings:
+                table.add_row(f.get("severity", ""), f.get("agent", ""), f.get("title", "")[:60])
+            console.print(table)
+        else:
+            console.print("[dim]No resolved findings.[/dim]")
+
+        console.print(
+            f"\n[info]Summary: +{len(new_findings)} new, -{len(resolved_findings)} resolved[/info]"
+        )
+    finally:
+        history.close()
+
+
+@scan_app.command("export")
+def scan_export(
+    scan_id: str = typer.Argument(..., help="Scan ID to export."),
+    fmt: str = typer.Option(
+        "json", "--format", "-f", help="Export format (json, csv, md)."
+    ),
+    output: Optional[Path] = typer.Option(  # noqa: UP007
+        None, "--output", "-o", help="Output file path (default: stdout)."
+    ),
+) -> None:
+    """Export scan findings to a file."""
+    import json as json_mod
+    from aisec.core.history import ScanHistory
+
+    history = ScanHistory()
+    try:
+        findings = history.get_findings(scan_id)
+        scan = history.get_scan(scan_id)
+        if not scan:
+            console.print(f"[error]Scan not found:[/error] {scan_id}")
+            raise typer.Exit(code=1)
+
+        fmt = fmt.strip().lower()
+
+        if fmt == "json":
+            content = json_mod.dumps(findings, indent=2, ensure_ascii=False)
+        elif fmt == "csv":
+            import csv
+            import io
+            buf = io.StringIO()
+            if findings:
+                writer = csv.DictWriter(buf, fieldnames=list(findings[0].keys()))
+                writer.writeheader()
+                writer.writerows(findings)
+            content = buf.getvalue()
+        elif fmt == "md":
+            lines = [f"# Scan Findings: {scan_id[:12]}", ""]
+            lines.append(f"**Target:** {scan.get('target_image', '')}")
+            lines.append(f"**Date:** {scan.get('started_at', '')}")
+            lines.append(f"**Total Findings:** {len(findings)}")
+            lines.append("")
+            lines.append("| Severity | Agent | Title | Status |")
+            lines.append("|----------|-------|-------|--------|")
+            for f in findings:
+                lines.append(
+                    f"| {f.get('severity', '')} | {f.get('agent', '')} "
+                    f"| {f.get('title', '')} | {f.get('status', '')} |"
+                )
+            content = "\n".join(lines) + "\n"
+        else:
+            console.print(f"[error]Unsupported format:[/error] {fmt}")
+            raise typer.Exit(code=1)
+
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(content, encoding="utf-8")
+            console.print(f"[success]Exported {len(findings)} findings to {output}[/success]")
+        else:
+            console.print(content)
+    finally:
+        history.close()

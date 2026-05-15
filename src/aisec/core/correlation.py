@@ -566,6 +566,180 @@ CORRELATION_RULES: list[dict[str, Any]] = [
             "from training data. Document lawful basis for processing under GDPR."
         ),
     },
+    # --- v1.10.0 agent-on-agent analysis correlation rules ---
+    {
+        "name": "Unbounded Agent Delegation + Dangerous Tools = Autonomous Tool Abuse",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "delegation", "any_title": True},
+            {"agent": "tool_chain", "severity_gte": Severity.HIGH},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Agent delegation without recursion or budget controls is combined "
+            "with high-risk tool-chain findings. A compromised or misaligned "
+            "agent can repeatedly delegate tasks while invoking dangerous tools, "
+            "amplifying cost, data access, or execution impact."
+        ),
+        "remediation": (
+            "Add delegation depth and step budgets, cycle detection, and approval "
+            "gates before high-risk tools. Classify tools by sensitivity and "
+            "block autonomous invocation of privileged actions."
+        ),
+    },
+    {
+        "name": "Self-Review + Memory Risk = Persistent Agent Misjudgment",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "independent reviewer", "any_title": True},
+            {"agent": "agent_memory", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.HIGH,
+        "description": (
+            "Agent self-review or non-independent critique is combined with "
+            "memory risk. Poisoned or stale memory can bias both the primary "
+            "agent and its reviewer path, allowing bad decisions to persist "
+            "across future runs."
+        ),
+        "remediation": (
+            "Use an independent reviewer boundary for high-impact decisions. "
+            "Add memory integrity checks, retention limits, and review evidence "
+            "that is stored outside mutable agent memory."
+        ),
+    },
+    {
+        "name": "Unaudited Agent Review + Cascade Risk = Untraceable Multi-Agent Failure",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "audit trail", "any_title": True},
+            {"agent": "cascade", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.HIGH,
+        "description": (
+            "Agent review decisions lack audit trails while cascade-risk findings "
+            "exist in the multi-agent architecture. When one agent approves, "
+            "scores, or delegates to another, failures can propagate without "
+            "durable evidence explaining the decision path."
+        ),
+        "remediation": (
+            "Persist review decisions with reviewer identity, reviewed agent, "
+            "input/output digests, verdict, rationale, and correlation IDs. "
+            "Combine that evidence with cascade controls such as circuit breakers "
+            "and fallback behavior."
+        ),
+    },
+    {
+        "name": "Agent Handoff Injection + Weak Prompt Defenses = Cross-Agent Prompt Injection",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "downstream instructions", "any_title": True},
+            {"agent": "prompt_security", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "One agent's output is reused as another agent's instructions while "
+            "prompt-security findings exist. A compromised upstream agent or "
+            "malicious retrieved content can inject instructions across the "
+            "handoff boundary and influence downstream behavior."
+        ),
+        "remediation": (
+            "Use typed handoff schemas, sanitize agent outputs, and strip role "
+            "directives or tool-call instructions before downstream execution. "
+            "Strengthen input validation and prompt-injection defenses."
+        ),
+    },
+    {
+        "name": "Reviewer Tool Sharing + Tool Chain Risk = Compromised Control Plane",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "privileged tool surface", "any_title": True},
+            {"agent": "tool_chain", "severity_gte": Severity.HIGH},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Reviewer agents share privileged tools with executor agents while "
+            "tool-chain findings indicate high-risk tool behavior. The reviewer "
+            "path can no longer act as a control boundary because compromise or "
+            "misuse gives it the same action surface as the executor."
+        ),
+        "remediation": (
+            "Separate reviewer and executor tool scopes. Reviewer agents should "
+            "use read-only inspection tools and explicit allowlists; privileged "
+            "write, execute, deployment, secret, and production tools should "
+            "require approval outside the reviewer agent."
+        ),
+    },
+    {
+        "name": "Shared Agent Identity + Exposed Credentials = Unattributable Agent Compromise",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "share one identity", "any_title": True},
+            {"agent": "dataflow", "title_contains": "credential", "any_title": True},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Multiple agents appear to share one identity while credentials are "
+            "also exposed in the system. A compromised credential can be used "
+            "across planner, executor, reviewer, or critic roles, making actions "
+            "difficult to attribute and containment harder."
+        ),
+        "remediation": (
+            "Rotate exposed credentials immediately. Issue per-agent identities "
+            "or delegated credentials with least-privilege scopes and actor "
+            "claims in every tool call and audit event."
+        ),
+    },
+    {
+        "name": "High-Impact Agent Action + Privileged Runtime = Unchecked Production Change",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "human escalation", "any_title": True},
+            {"agent": "permission", "severity_gte": Severity.HIGH},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "High-impact agent actions lack a human escalation boundary while "
+            "runtime permissions are high risk. Autonomous agents may approve, "
+            "deploy, delete, revoke, or mutate production resources with elevated "
+            "privileges and no external override."
+        ),
+        "remediation": (
+            "Remove excessive runtime permissions and require human approval for "
+            "production-impacting actions. Add kill switches, break-glass controls, "
+            "and audited approval records before privileged execution."
+        ),
+    },
+    {
+        "name": "Shared Review Memory + Memory Risk = Biased Agent Oversight",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "share mutable memory", "any_title": True},
+            {"agent": "agent_memory", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.CRITICAL,
+        "description": (
+            "Reviewer and executor agents share mutable memory while memory-risk "
+            "findings exist. Poisoned, stale, or untrusted context can influence "
+            "both the agent performing work and the agent reviewing that work, "
+            "turning review into a biased echo path."
+        ),
+        "remediation": (
+            "Separate reviewer memory namespaces from executor memory. Use "
+            "read-only evidence snapshots, integrity checks, and immutable review "
+            "records outside mutable agent memory."
+        ),
+    },
+    {
+        "name": "Suppressed Review Dissent + Cascade Risk = Silent Multi-Agent Failure",
+        "conditions": [
+            {"agent": "agentic_review", "title_contains": "dissent is suppressed", "any_title": True},
+            {"agent": "cascade", "severity_gte": Severity.MEDIUM},
+        ],
+        "severity": Severity.HIGH,
+        "description": (
+            "Agent review dissent, ties, low confidence, or review failures are "
+            "suppressed while cascade-risk findings exist. Multi-agent failures "
+            "can propagate silently because disagreement does not trigger a stop, "
+            "fallback, or escalation path."
+        ),
+        "remediation": (
+            "Fail closed or escalate on disagreement for high-impact workflows. "
+            "Add human tie-breaks, fallback behavior, circuit breakers, and durable "
+            "records of dissent and resolution."
+        ),
+    },
 ]
 
 

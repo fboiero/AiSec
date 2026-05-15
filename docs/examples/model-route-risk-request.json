@@ -1,0 +1,60 @@
+{
+  "schema_version": "aisec.model_risk.v1",
+  "request_id": "model-route-demo-001",
+  "source": "generic-orchestrator",
+  "target": {
+    "type": "model",
+    "name": "Customer support fallback model",
+    "provider": "anthropic",
+    "model_id": "claude-3-5-sonnet",
+    "environment": "production",
+    "usage_context": "support-ticket-classification",
+    "capabilities": {
+      "rag_enabled": false,
+      "tools_enabled": false,
+      "memory_enabled": false,
+      "mcp_enabled": false,
+      "code_execution_enabled": false,
+      "web_access_enabled": false,
+      "fine_tuning_enabled": false,
+      "multimodal_enabled": false
+    },
+    "data_classes": [
+      "customer_messages",
+      "pii"
+    ],
+    "metadata": {
+      "route_id": "support-fallback",
+      "approval_required": true
+    }
+  },
+  "frameworks": [
+    "owasp_llm",
+    "nist_ai_rmf",
+    "iso_42001",
+    "gdpr",
+    "habeas_data"
+  ],
+  "context": {
+    "organization_id": "demo-org",
+    "project_id": "support-platform",
+    "requested_by": "model-governance",
+    "jurisdiction": "AR",
+    "safeguards": {
+      "pii_redaction": true,
+      "prompt_logging_disabled": true,
+      "consent_required": true,
+      "retention_policy_defined": true,
+      "human_in_loop": false,
+      "tool_approval_required": false,
+      "output_filtering": true,
+      "retrieval_filtering": false,
+      "tenant_isolation": true,
+      "audit_logging": true,
+      "rate_limiting": true
+    }
+  },
+  "policy": {
+    "fail_on": "critical"
+  }
+}
