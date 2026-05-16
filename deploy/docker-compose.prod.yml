@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   aisec-api:
-    image: ghcr.io/fboiero/aisec:1.10.0
+    image: ghcr.io/fboiero/aisec:${AISEC_IMAGE_TAG:-1.10.0}
     container_name: aisec-api
     command: ["aisec", "serve", "--host", "0.0.0.0", "--port", "8000", "--dashboard"]
     ports:

@@ -80,6 +80,14 @@ AISEC_BASE_URL=http://localhost:8000 \
   scripts/smoke-managed-api.sh
 ```
 
+Capture pilot evidence before and after changes:
+
+```bash
+AISEC_BASE_URL=http://localhost:8000 \
+AISEC_EVIDENCE_DIR=aisec-managed-evidence/pre-upgrade \
+  scripts/capture-managed-evidence.sh
+```
+
 ## Kubernetes Pilot
 
 ```bash
@@ -153,6 +161,8 @@ Before go-live:
 - `POST /api/evaluate/model/` stores a model-risk evaluation.
 - `GET /api/evaluations/rollup/` returns posture data.
 - `scripts/smoke-managed-api.sh` passes against the deployed service URL.
+- `scripts/capture-managed-evidence.sh` captures live, ready, OpenAPI,
+  rollup, evaluations, baselines, and exceptions.
 - Baseline creation and comparison work for one approved target.
 - Exception creation and expiry behavior are tested.
 - Persistent volume survives pod restart.
@@ -168,6 +178,83 @@ Before go-live:
 5. Confirm existing evaluations, baselines, and exceptions still list.
 6. Promote to production with a rolling update.
 7. Keep the previous image tag available for rollback.
+
+## Evidence Capture
+
+Capture service evidence before upgrades, after upgrades, and after rollbacks:
+
+```bash
+AISEC_BASE_URL=https://aisec.internal.example.com \
+AISEC_EVIDENCE_DIR=aisec-managed-evidence/pre-upgrade \
+  scripts/capture-managed-evidence.sh
+
+AISEC_BASE_URL=https://aisec.internal.example.com \
+AISEC_EVIDENCE_DIR=aisec-managed-evidence/post-upgrade \
+  scripts/capture-managed-evidence.sh
+```
+
+The evidence directory includes:
+
+- `live.json`
+- `ready.json`
+- `openapi.json`
+- `model-risk-rollup.json`
+- `model-risk-evaluations.json`
+- `model-risk-baselines.json`
+- `model-risk-exceptions.json`
+
+Store these artifacts with the deployment ticket or pilot report.
+
+## Rollback Runbook
+
+Rollback trigger examples:
+
+- `/api/ready/` fails after deployment.
+- `scripts/smoke-managed-api.sh` fails against staging or production.
+- Existing evaluations, baselines, or exceptions no longer list.
+- OpenAPI paths are missing expected model-risk endpoints.
+- Error rate or latency exceeds the pilot threshold.
+
+Before rollback, capture failure evidence:
+
+```bash
+AISEC_BASE_URL=https://aisec.internal.example.com \
+AISEC_EVIDENCE_DIR=aisec-managed-evidence/failed-upgrade \
+  scripts/capture-managed-evidence.sh
+```
+
+Docker Compose rollback:
+
+```bash
+cd deploy
+AISEC_IMAGE_TAG=1.10.0 docker compose -f docker-compose.prod.yml up -d
+AISEC_BASE_URL=http://localhost:8000 ../scripts/smoke-managed-api.sh
+```
+
+Kubernetes rollback:
+
+```bash
+kubectl -n aisec rollout undo deploy/aisec-api
+kubectl -n aisec rollout status deploy/aisec-api
+AISEC_BASE_URL=https://aisec.internal.example.com scripts/smoke-managed-api.sh
+```
+
+Helm rollback:
+
+```bash
+helm history aisec -n aisec
+helm rollback aisec <REVISION> -n aisec
+kubectl -n aisec rollout status deploy/aisec-api
+AISEC_BASE_URL=https://aisec.internal.example.com scripts/smoke-managed-api.sh
+```
+
+After rollback, capture recovery evidence:
+
+```bash
+AISEC_BASE_URL=https://aisec.internal.example.com \
+AISEC_EVIDENCE_DIR=aisec-managed-evidence/post-rollback \
+  scripts/capture-managed-evidence.sh
+```
 
 ## Current Asset Status
 

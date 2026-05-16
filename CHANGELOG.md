@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   assets aligned with current image and health probes.
 - Managed API smoke script for external pilots:
   `scripts/smoke-managed-api.sh`.
+- Managed evidence capture script and rollback runbook for external pilots:
+  `scripts/capture-managed-evidence.sh`.
 - `aisec evaluate compare` to compare current model-risk evidence against an
   approved baseline and optionally fail CI on regression.
 - API-mode evaluation history for model-risk evidence via

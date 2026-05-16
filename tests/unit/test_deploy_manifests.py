@@ -130,6 +130,9 @@ class TestDockerCompose:
             doc = yaml.safe_load(f)
         assert "aisec-api" in doc["services"]
         assert "nginx" in doc["services"]
+        assert doc["services"]["aisec-api"]["image"] == (
+            "ghcr.io/fboiero/aisec:${AISEC_IMAGE_TAG:-1.10.0}"
+        )
 
     def test_docker_compose_port_mapping(self):
         with open(DEPLOY_DIR / "docker-compose.prod.yml") as f:

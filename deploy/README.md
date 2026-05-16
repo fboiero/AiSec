@@ -22,6 +22,14 @@ Run the managed API smoke check:
 AISEC_BASE_URL=http://localhost:8000 ../scripts/smoke-managed-api.sh
 ```
 
+Capture managed deployment evidence:
+
+```bash
+AISEC_BASE_URL=http://localhost:8000 \
+AISEC_EVIDENCE_DIR=../aisec-managed-evidence/local \
+  ../scripts/capture-managed-evidence.sh
+```
+
 ### Kubernetes (raw manifests)
 
 ```bash

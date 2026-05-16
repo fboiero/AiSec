@@ -30,7 +30,7 @@ As of May 2026:
 - Model-risk protocol: `aisec.model_risk.v1`.
 - Command: `aisec evaluate model`.
 - First integration target: OrchestAI.
-- Tests: 1,481 passing and 9 skipped in local `.venv` with `.[api,dev]`.
+- Tests: 1,484 passing and 9 skipped in local `.venv` with `.[api,dev]`.
 - Correlation rules: 40 total, including 9 centered on `agentic_review`.
 
 ## 2026 Outcomes
@@ -71,6 +71,7 @@ Implemented in the local v1.10.0 workspace:
 - Managed deployment path for shared service-mode AiSec using Docker Compose,
   Kubernetes, or Helm.
 - Managed API smoke script for external pilot validation.
+- Managed evidence capture and rollback runbook for external pilot operations.
 - GitHub Actions and GitLab CI examples for advisory/blocking model-risk gates.
 - CI artifact parser and Markdown/JSON summary command for model-risk results.
 - Framework evidence export command for model-risk compliance records.
