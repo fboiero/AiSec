@@ -88,6 +88,17 @@ AISEC_EVIDENCE_DIR=aisec-managed-evidence/pre-upgrade \
   scripts/capture-managed-evidence.sh
 ```
 
+For external pilots, run the full rehearsal wrapper:
+
+```bash
+AISEC_BASE_URL=http://localhost:8000 \
+AISEC_REHEARSAL_ID=pilot-001 \
+  scripts/rehearse-managed-pilot.sh
+```
+
+The rehearsal captures pre-smoke evidence, runs the managed API smoke check,
+captures post-smoke evidence, and writes a small run report.
+
 ## Kubernetes Pilot
 
 ```bash
@@ -163,6 +174,8 @@ Before go-live:
 - `scripts/smoke-managed-api.sh` passes against the deployed service URL.
 - `scripts/capture-managed-evidence.sh` captures live, ready, OpenAPI,
   rollup, evaluations, baselines, and exceptions.
+- `scripts/rehearse-managed-pilot.sh` creates a complete pilot evidence
+  package with pre-smoke and post-smoke captures.
 - Baseline creation and comparison work for one approved target.
 - Exception creation and expiry behavior are tested.
 - Persistent volume survives pod restart.
@@ -204,6 +217,31 @@ The evidence directory includes:
 - `model-risk-exceptions.json`
 
 Store these artifacts with the deployment ticket or pilot report.
+
+## Managed Pilot Rehearsal
+
+Use the rehearsal wrapper when validating an external pilot environment:
+
+```bash
+AISEC_BASE_URL=https://aisec.internal.example.com \
+AISEC_REHEARSAL_ID=pilot-rehearsal-001 \
+AISEC_REHEARSAL_DIR=aisec-managed-rehearsals \
+  scripts/rehearse-managed-pilot.sh
+```
+
+The run directory contains:
+
+- `pre-smoke/`
+- `smoke.log`
+- `post-smoke/`
+- `README.md`
+
+Review checklist:
+
+- `smoke.log` ends with a passing evaluation summary.
+- `post-smoke/model-risk-rollup.json` includes at least one evaluation.
+- `post-smoke/model-risk-evaluations.json` includes the smoke evaluation.
+- `pre-smoke/` and `post-smoke/` are attached to the pilot report.
 
 ## Rollback Runbook
 

@@ -30,6 +30,14 @@ AISEC_EVIDENCE_DIR=../aisec-managed-evidence/local \
   ../scripts/capture-managed-evidence.sh
 ```
 
+Run a complete local pilot rehearsal:
+
+```bash
+AISEC_BASE_URL=http://localhost:8000 \
+AISEC_REHEARSAL_DIR=../aisec-managed-rehearsals \
+  ../scripts/rehearse-managed-pilot.sh
+```
+
 ### Kubernetes (raw manifests)
 
 ```bash

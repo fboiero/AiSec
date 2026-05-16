@@ -135,10 +135,11 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: managed deployment path for service-mode AiSec.
 - Completed: managed API smoke script for external pilots.
 - Completed: managed evidence capture and rollback runbook for external pilots.
+- Completed: managed pilot rehearsal script and evidence package.
 
 ### Days 61-90
 
-- Run external pilot rehearsal and capture evidence.
+- Execute external pilot with a real managed environment.
 
 ## Success Metrics
 

@@ -13,7 +13,7 @@ As of the current local workspace:
 - Version: `1.10.0`.
 - Branch: `main`.
 - Release target: `v1.10.0`.
-- Unit tests: `1484 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- Unit tests: `1486 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - Security agents: `36`.
 - Correlation rules: `40`.
 - Agent-on-agent correlation rules: `9`.
@@ -558,6 +558,8 @@ Completed after v1.10.0 release:
   `scripts/smoke-managed-api.sh`.
 - Added managed evidence capture script and rollback runbook:
   `scripts/capture-managed-evidence.sh`.
+- Added managed pilot rehearsal script:
+  `scripts/rehearse-managed-pilot.sh`.
 - Added validated OrchestAI use-case fixtures for customer-support RAG and an
   MCP-enabled operations agent.
 - Added CI artifact parser and summary command:
