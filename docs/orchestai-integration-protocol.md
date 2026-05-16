@@ -11,7 +11,7 @@ For a full current-state handoff aimed at another coding agent, read
 
 AiSec is not imported into the orchestrator as an application dependency. The
 orchestrator invokes AiSec through a stable JSON contract, initially via
-CLI/container and later through the same payload over an API.
+CLI/container or through the same payload over the `aisec serve` API.
 
 ```text
 Orchestrator compliance module
@@ -58,9 +58,38 @@ Exit codes:
 
 Use `--fail-on none` for non-blocking evidence collection.
 
+Summarize one or more result artifacts for PR/MR comments or CI uploads:
+
+```bash
+aisec evaluate summarize \
+  --input aisec-results \
+  --output aisec-results/model-risk-summary.md \
+  --format markdown \
+  --no-strict
+```
+
+The summary command accepts JSON files or directories, validates
+`ModelRiskEvaluationResult` artifacts, and writes a compact rollup with target,
+risk, verdict, severity counts, and top findings.
+
+Compare a current result against an approved baseline:
+
+```bash
+aisec evaluate compare \
+  --baseline approved/model-risk-result.json \
+  --current aisec-results/model-risk-result.json \
+  --output aisec-results/model-risk-comparison.md \
+  --format markdown
+```
+
+Use `--fail-on-regression` when CI should block on unaccepted new findings,
+worse risk level, or worse policy verdict. In API mode, active model-risk
+exceptions can accept specific new finding fingerprints for a target.
+
 Other examples:
 
 - [`examples/aisec_subprocess_adapter.py`](examples/aisec_subprocess_adapter.py)
+- [`examples/aisec_http_adapter.py`](examples/aisec_http_adapter.py)
 - [`examples/github-actions-model-risk.yml`](examples/github-actions-model-risk.yml)
 - [`examples/gitlab-model-risk.yml`](examples/gitlab-model-risk.yml)
 - [`examples/model-route-risk-request.json`](examples/model-route-risk-request.json)
@@ -187,6 +216,113 @@ compliance:
       fail_on: critical
       timeout_seconds: 600
 ```
+
+## HTTP Invocation
+
+When AiSec is running as a service, submit the same request payload to:
+
+```http
+POST /api/evaluate/model/
+Content-Type: application/json
+Accept: application/json
+```
+
+Start a local API server:
+
+```bash
+aisec serve --host 127.0.0.1 --port 8000
+```
+
+Then call:
+
+```bash
+curl -sS \
+  -H 'Content-Type: application/json' \
+  --data @docs/examples/orchestai-model-risk-request.json \
+  http://127.0.0.1:8000/api/evaluate/model/
+```
+
+The response body is the same `ModelRiskEvaluationResult` returned by the CLI.
+The HTTP endpoint does not turn policy failures into HTTP errors; a valid
+evaluation returns `200` and the consuming platform should inspect
+`policy_verdict.status`.
+
+API-mode evaluations are persisted as evidence records. Retrieve them with:
+
+```http
+GET /api/evaluations/
+GET /api/evaluations/rollup/
+GET /api/evaluations/{evaluation_id}/
+```
+
+`GET /api/evaluations/` returns a paginated summary list and accepts optional
+`target_name`, `page`, and `page_size` query parameters. The detail endpoint
+returns the stored request and full result JSON. The rollup endpoint returns
+posture metrics for governance screens: total evaluations, unique targets,
+average risk score, risk counts, policy verdict counts, and latest evaluations.
+
+Approved baselines can be stored from persisted evaluations:
+
+```http
+POST /api/evaluation-baselines/
+GET /api/evaluation-baselines/
+GET /api/evaluation-baselines/{baseline_id}/
+DELETE /api/evaluation-baselines/{baseline_id}/
+POST /api/evaluation-baselines/{baseline_id}/compare/
+```
+
+Baseline creation body:
+
+```json
+{
+  "name": "release-approved",
+  "target_name": "EPEC claims assistant",
+  "evaluation_id": "stored-evaluation-id",
+  "description": "Approved release evidence"
+}
+```
+
+Baseline comparison body:
+
+```json
+{
+  "current_evaluation_id": "current-evaluation-id"
+}
+```
+
+The comparison response includes `new_findings`, `accepted_new_findings`,
+`unaccepted_new_findings`, `resolved_findings`, `unchanged_findings`,
+`risk_regressed`, `policy_regressed`, and `has_regression`. `has_regression`
+means there is an unaccepted regression that should block a gate.
+
+Accepted exceptions are managed independently from baselines:
+
+```http
+POST /api/evaluation-exceptions/
+GET /api/evaluation-exceptions/
+DELETE /api/evaluation-exceptions/{exception_id}/
+```
+
+Exception creation body:
+
+```json
+{
+  "target_name": "EPEC claims assistant",
+  "finding_fingerprint": "finding-fingerprint-from-comparison",
+  "reason": "Accepted for pilot window",
+  "accepted_by": "security",
+  "expires_at": "2026-06-30T23:59:59Z"
+}
+```
+
+`GET /api/evaluation-exceptions/` accepts optional `target_name`. Baseline
+comparison automatically applies active, non-expired exceptions for the current
+evaluation's target. Deleting an exception deactivates it instead of removing
+the audit record.
+
+Use [`examples/aisec_http_adapter.py`](examples/aisec_http_adapter.py) for a
+standalone Python client that distinguishes endpoint/network failures from
+valid AiSec policy results.
 
 The subprocess adapter example treats infrastructure failures separately from
 AiSec policy results:

@@ -108,6 +108,56 @@ CREATE INDEX IF NOT EXISTS idx_scan_reports_status ON scan_reports(status);
 CREATE INDEX IF NOT EXISTS idx_scan_reports_target ON scan_reports(target_image);
 CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(active);
 
+CREATE TABLE IF NOT EXISTS model_evaluations (
+    evaluation_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    provider TEXT DEFAULT '',
+    model_id TEXT DEFAULT '',
+    source TEXT DEFAULT '',
+    overall_risk TEXT NOT NULL,
+    risk_score REAL NOT NULL,
+    policy_verdict TEXT NOT NULL,
+    finding_count INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    request_json TEXT NOT NULL,
+    result_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_evaluations_target ON model_evaluations(target_name);
+CREATE INDEX IF NOT EXISTS idx_model_evaluations_request ON model_evaluations(request_id);
+CREATE INDEX IF NOT EXISTS idx_model_evaluations_created ON model_evaluations(created_at);
+CREATE INDEX IF NOT EXISTS idx_model_evaluations_verdict ON model_evaluations(policy_verdict);
+
+CREATE TABLE IF NOT EXISTS model_evaluation_baselines (
+    baseline_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    evaluation_id TEXT NOT NULL REFERENCES model_evaluations(evaluation_id),
+    created_at TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    UNIQUE(name, target_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_baselines_target ON model_evaluation_baselines(target_name);
+CREATE INDEX IF NOT EXISTS idx_model_baselines_evaluation ON model_evaluation_baselines(evaluation_id);
+
+CREATE TABLE IF NOT EXISTS model_evaluation_exceptions (
+    exception_id TEXT PRIMARY KEY,
+    target_name TEXT NOT NULL,
+    finding_fingerprint TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    accepted_by TEXT DEFAULT '',
+    expires_at TEXT,
+    created_at TEXT NOT NULL,
+    active INTEGER DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_exceptions_target ON model_evaluation_exceptions(target_name);
+CREATE INDEX IF NOT EXISTS idx_model_exceptions_fingerprint ON model_evaluation_exceptions(finding_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_model_exceptions_active ON model_evaluation_exceptions(active);
+
 CREATE TABLE IF NOT EXISTS audit_events (
     event_id TEXT PRIMARY KEY,
     timestamp TEXT NOT NULL,
@@ -452,6 +502,9 @@ class ScanHistory:
         policies = conn.execute("SELECT COUNT(*) FROM scan_policies").fetchone()[0]
         scan_reports = conn.execute("SELECT COUNT(*) FROM scan_reports").fetchone()[0]
         webhooks_count = conn.execute("SELECT COUNT(*) FROM webhooks").fetchone()[0]
+        model_evaluations = conn.execute("SELECT COUNT(*) FROM model_evaluations").fetchone()[0]
+        model_baselines = conn.execute("SELECT COUNT(*) FROM model_evaluation_baselines").fetchone()[0]
+        model_exceptions = conn.execute("SELECT COUNT(*) FROM model_evaluation_exceptions").fetchone()[0]
         return {
             "total_scans": total,
             "unique_targets": targets,
@@ -460,6 +513,9 @@ class ScanHistory:
             "scan_policies": policies,
             "scan_reports": scan_reports,
             "webhooks": webhooks_count,
+            "model_evaluations": model_evaluations,
+            "model_baselines": model_baselines,
+            "model_exceptions": model_exceptions,
             "db_path": str(self.db_path),
         }
 
@@ -730,6 +786,291 @@ class ScanHistory:
         conn = self._get_conn()
         result = conn.execute(
             "DELETE FROM scan_reports WHERE scan_id = ?", (scan_id,)
+        )
+        conn.commit()
+        return result.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Model-risk evaluation persistence (API server evidence)
+    # ------------------------------------------------------------------
+
+    def save_model_evaluation(self, request: Any, result: Any) -> str:
+        """Persist a model-risk evaluation request/result pair."""
+        conn = self._get_conn()
+        request_json = request.model_dump_json() if hasattr(request, "model_dump_json") else json.dumps(request, cls=_Encoder)
+        result_json = result.model_dump_json() if hasattr(result, "model_dump_json") else json.dumps(result, cls=_Encoder)
+        created_at = result.created_at.isoformat() if hasattr(result.created_at, "isoformat") else str(result.created_at)
+        conn.execute(
+            """INSERT OR REPLACE INTO model_evaluations
+            (evaluation_id, request_id, target_name, target_type, provider,
+             model_id, source, overall_risk, risk_score, policy_verdict,
+             finding_count, created_at, request_json, result_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                result.evaluation_id,
+                result.request_id,
+                result.target.name,
+                result.target.type,
+                result.target.provider,
+                result.target.model_id,
+                request.source,
+                result.overall_risk,
+                result.risk_score,
+                result.policy_verdict.status,
+                len(result.findings),
+                created_at,
+                request_json,
+                result_json,
+            ),
+        )
+        conn.commit()
+        return result.evaluation_id
+
+    def get_model_evaluation(self, evaluation_id: str) -> dict[str, Any] | None:
+        """Retrieve a persisted model-risk evaluation by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM model_evaluations WHERE evaluation_id = ?",
+            (evaluation_id,),
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result["request"] = json.loads(result.pop("request_json"))
+        result["result"] = json.loads(result.pop("result_json"))
+        return result
+
+    def list_model_evaluations(
+        self,
+        target_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List persisted model-risk evaluations without full JSON payloads."""
+        conn = self._get_conn()
+        if target_name:
+            rows = conn.execute(
+                """SELECT evaluation_id, request_id, target_name, target_type,
+                          provider, model_id, source, overall_risk, risk_score,
+                          policy_verdict, finding_count, created_at
+                FROM model_evaluations
+                WHERE target_name = ?
+                ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+                (target_name, limit, offset),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT evaluation_id, request_id, target_name, target_type,
+                          provider, model_id, source, overall_risk, risk_score,
+                          policy_verdict, finding_count, created_at
+                FROM model_evaluations
+                ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+                (limit, offset),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_model_evaluations(self, target_name: str | None = None) -> int:
+        """Return total model-risk evaluation count."""
+        conn = self._get_conn()
+        if target_name:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM model_evaluations WHERE target_name = ?",
+                (target_name,),
+            ).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) FROM model_evaluations").fetchone()
+        return row[0]
+
+    def model_evaluation_rollup(self, target_name: str | None = None) -> dict[str, Any]:
+        """Aggregate persisted model-risk evaluations for posture dashboards."""
+        conn = self._get_conn()
+        where = "WHERE target_name = ?" if target_name else ""
+        params: tuple[Any, ...] = (target_name,) if target_name else ()
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM model_evaluations {where}",
+            params,
+        ).fetchone()[0]
+        targets = conn.execute(
+            f"SELECT COUNT(DISTINCT target_name) FROM model_evaluations {where}",
+            params,
+        ).fetchone()[0]
+        avg_row = conn.execute(
+            f"SELECT AVG(risk_score) FROM model_evaluations {where}",
+            params,
+        ).fetchone()
+        risk_rows = conn.execute(
+            f"SELECT overall_risk, COUNT(*) AS count FROM model_evaluations {where} GROUP BY overall_risk",
+            params,
+        ).fetchall()
+        verdict_rows = conn.execute(
+            f"SELECT policy_verdict, COUNT(*) AS count FROM model_evaluations {where} GROUP BY policy_verdict",
+            params,
+        ).fetchall()
+        latest = self.list_model_evaluations(target_name=target_name, limit=5, offset=0)
+        return {
+            "total_evaluations": total,
+            "unique_targets": targets,
+            "average_risk_score": round(float(avg_row[0] or 0.0), 2),
+            "risk_counts": {row["overall_risk"]: row["count"] for row in risk_rows},
+            "policy_counts": {row["policy_verdict"]: row["count"] for row in verdict_rows},
+            "latest": latest,
+        }
+
+    def save_model_baseline(
+        self,
+        name: str,
+        target_name: str,
+        evaluation_id: str,
+        description: str = "",
+    ) -> str:
+        """Save a model-risk evaluation as a named approved baseline."""
+        conn = self._get_conn()
+        baseline_id = str(uuid4())[:12]
+        conn.execute(
+            """INSERT OR REPLACE INTO model_evaluation_baselines
+            (baseline_id, name, target_name, evaluation_id, created_at, description)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                baseline_id,
+                name,
+                target_name,
+                evaluation_id,
+                datetime.now(timezone.utc).isoformat(),
+                description,
+            ),
+        )
+        conn.commit()
+        return baseline_id
+
+    def get_model_baseline(
+        self,
+        *,
+        baseline_id: str | None = None,
+        name: str | None = None,
+        target_name: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Retrieve a model-risk baseline by ID or by name and target."""
+        conn = self._get_conn()
+        if baseline_id:
+            row = conn.execute(
+                "SELECT * FROM model_evaluation_baselines WHERE baseline_id = ?",
+                (baseline_id,),
+            ).fetchone()
+        elif name and target_name:
+            row = conn.execute(
+                """SELECT * FROM model_evaluation_baselines
+                WHERE name = ? AND target_name = ?""",
+                (name, target_name),
+            ).fetchone()
+        else:
+            return None
+        return dict(row) if row else None
+
+    def list_model_baselines(self, target_name: str | None = None) -> list[dict[str, Any]]:
+        """List named approved baselines for model-risk evaluations."""
+        conn = self._get_conn()
+        if target_name:
+            rows = conn.execute(
+                """SELECT * FROM model_evaluation_baselines
+                WHERE target_name = ? ORDER BY created_at DESC""",
+                (target_name,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM model_evaluation_baselines ORDER BY created_at DESC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_model_baseline(self, baseline_id: str) -> bool:
+        """Delete a model-risk baseline by ID."""
+        conn = self._get_conn()
+        result = conn.execute(
+            "DELETE FROM model_evaluation_baselines WHERE baseline_id = ?",
+            (baseline_id,),
+        )
+        conn.commit()
+        return result.rowcount > 0
+
+    def save_model_exception(
+        self,
+        target_name: str,
+        finding_fingerprint: str,
+        reason: str,
+        accepted_by: str = "",
+        expires_at: str | None = None,
+    ) -> str:
+        """Save an accepted model-risk finding exception."""
+        conn = self._get_conn()
+        exception_id = str(uuid4())[:12]
+        conn.execute(
+            """INSERT INTO model_evaluation_exceptions
+            (exception_id, target_name, finding_fingerprint, reason,
+             accepted_by, expires_at, created_at, active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+            (
+                exception_id,
+                target_name,
+                finding_fingerprint,
+                reason,
+                accepted_by,
+                expires_at,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        return exception_id
+
+    def list_model_exceptions(
+        self,
+        target_name: str | None = None,
+        active_only: bool = True,
+    ) -> list[dict[str, Any]]:
+        """List accepted model-risk exceptions."""
+        conn = self._get_conn()
+        clauses: list[str] = []
+        params: list[Any] = []
+        if target_name:
+            clauses.append("target_name = ?")
+            params.append(target_name)
+        if active_only:
+            clauses.append("active = 1")
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM model_evaluation_exceptions {where} ORDER BY created_at DESC",
+            params,
+        ).fetchall()
+        exceptions = [dict(r) for r in rows]
+        if active_only:
+            exceptions = [row for row in exceptions if self._model_exception_is_current(row)]
+        return exceptions
+
+    def accepted_model_exception_fingerprints(self, target_name: str) -> set[str]:
+        """Return active accepted fingerprints for a target."""
+        return {
+            row["finding_fingerprint"]
+            for row in self.list_model_exceptions(target_name=target_name, active_only=True)
+        }
+
+    @staticmethod
+    def _model_exception_is_current(row: dict[str, Any]) -> bool:
+        """Return whether an active exception has not expired."""
+        expires_at = row.get("expires_at")
+        if not expires_at:
+            return True
+        try:
+            expires_at_dt = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if expires_at_dt.tzinfo is None:
+            expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
+        return expires_at_dt > datetime.now(timezone.utc)
+
+    def delete_model_exception(self, exception_id: str) -> bool:
+        """Deactivate an accepted model-risk exception."""
+        conn = self._get_conn()
+        result = conn.execute(
+            "UPDATE model_evaluation_exceptions SET active = 0 WHERE exception_id = ?",
+            (exception_id,),
         )
         conn.commit()
         return result.rowcount > 0

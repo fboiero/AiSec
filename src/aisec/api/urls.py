@@ -31,6 +31,15 @@ def _build_urlpatterns() -> list[Any]:
         path("api/scans/", views["list_scans"], name="list-scans"),
         path("api/scan/<str:scan_id>/delete/", views["delete_scan"], name="delete-scan"),
         path("api/scans/<str:scan_id>/cancel/", views["cancel_scan"], name="cancel-scan"),
+        path("api/evaluate/model/", views["evaluate_model_risk"], name="evaluate-model-risk"),
+        path("api/evaluations/", views["list_model_risk_evaluations"], name="list-model-risk-evaluations"),
+        path("api/evaluations/rollup/", views["model_risk_evaluation_rollup"], name="model-risk-evaluation-rollup"),
+        path("api/evaluations/<str:evaluation_id>/", views["get_model_risk_evaluation"], name="get-model-risk-evaluation"),
+        path("api/evaluation-baselines/", views["model_risk_baselines"], name="model-risk-baselines"),
+        path("api/evaluation-baselines/<str:baseline_id>/", views["model_risk_baseline_detail"], name="model-risk-baseline-detail"),
+        path("api/evaluation-baselines/<str:baseline_id>/compare/", views["compare_model_risk_baseline"], name="compare-model-risk-baseline"),
+        path("api/evaluation-exceptions/", views["model_risk_exceptions"], name="model-risk-exceptions"),
+        path("api/evaluation-exceptions/<str:exception_id>/", views["delete_model_risk_exception"], name="delete-model-risk-exception"),
         path("api/webhooks/", views["webhooks"], name="webhooks"),
         path("api/webhooks/<str:webhook_id>/", views["delete_webhook"], name="delete-webhook"),
         path("api/metrics/", views["metrics_view"], name="metrics"),
@@ -72,6 +81,11 @@ class _LazyUrlpatterns:
         if self._patterns is None:
             self._patterns = _get_urlpatterns()
         return len(self._patterns)
+
+    def __reversed__(self) -> Any:
+        if self._patterns is None:
+            self._patterns = _get_urlpatterns()
+        return reversed(self._patterns)
 
 
 urlpatterns = _LazyUrlpatterns()

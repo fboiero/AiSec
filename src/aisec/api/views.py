@@ -246,6 +246,15 @@ def _get_views() -> dict[str, Any]:
     WebhookSerializer = serializers["WebhookSerializer"]
     WebhookResponseSerializer = serializers["WebhookResponseSerializer"]
     BatchScanRequestSerializer = serializers["BatchScanRequestSerializer"]
+    ModelRiskEvaluationRequestSerializer = serializers["ModelRiskEvaluationRequestSerializer"]
+    ModelRiskEvaluationStatusSerializer = serializers["ModelRiskEvaluationStatusSerializer"]
+    ModelRiskEvaluationRecordSerializer = serializers["ModelRiskEvaluationRecordSerializer"]
+    ModelRiskEvaluationRollupSerializer = serializers["ModelRiskEvaluationRollupSerializer"]
+    ModelRiskBaselineRequestSerializer = serializers["ModelRiskBaselineRequestSerializer"]
+    ModelRiskBaselineSerializer = serializers["ModelRiskBaselineSerializer"]
+    ModelRiskBaselineCompareRequestSerializer = serializers["ModelRiskBaselineCompareRequestSerializer"]
+    ModelRiskExceptionRequestSerializer = serializers["ModelRiskExceptionRequestSerializer"]
+    ModelRiskExceptionSerializer = serializers["ModelRiskExceptionSerializer"]
 
     @api_view(["GET", "POST"])
     def webhooks(request: Any) -> Response:
@@ -349,6 +358,240 @@ def _get_views() -> dict[str, Any]:
             {"batch_size": len(images), "scans": scan_ids},
             status=status.HTTP_201_CREATED,
         )
+
+    # -- Model-risk evaluation ---------------------------------------------
+
+    @api_view(["POST"])
+    def evaluate_model_risk_view(request: Any) -> Response:
+        """Evaluate a model-risk descriptor over HTTP."""
+        from pydantic import ValidationError as PydanticValidationError
+
+        from aisec.core.exceptions import error_response
+        from aisec.evaluation import ModelRiskEvaluationRequest, evaluate_model_risk
+
+        serializer = ModelRiskEvaluationRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            evaluation_request = ModelRiskEvaluationRequest.model_validate(dict(request.data))
+        except PydanticValidationError as exc:
+            return Response(
+                error_response(
+                    "VALIDATION_ERROR",
+                    "Invalid model-risk evaluation request.",
+                    {"errors": exc.errors()},
+                ),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = evaluate_model_risk(evaluation_request)
+        _get_history().save_model_evaluation(evaluation_request, result)
+        _audit_log(
+            "model_risk.evaluated",
+            "model_risk_evaluation",
+            result.evaluation_id,
+            request,
+            f"target={result.target.name}; verdict={result.policy_verdict.status}",
+        )
+        return Response(result.model_dump(mode="json"), status=status.HTTP_200_OK)
+
+    @api_view(["GET"])
+    def list_model_risk_evaluations(request: Any) -> Response:
+        """List persisted model-risk evaluations."""
+        page = int(request.query_params.get("page", 1))
+        page_size = int(request.query_params.get("page_size", 20))
+        target_name = request.query_params.get("target_name")
+        offset = (page - 1) * page_size
+        entries = _get_history().list_model_evaluations(
+            target_name=target_name,
+            limit=page_size,
+            offset=offset,
+        )
+        total = _get_history().count_model_evaluations(target_name=target_name)
+        serializer = ModelRiskEvaluationStatusSerializer(entries, many=True)
+        return Response(_paginate(serializer.data, page, page_size, total))
+
+    @api_view(["GET"])
+    def get_model_risk_evaluation(request: Any, evaluation_id: str) -> Response:
+        """Retrieve one persisted model-risk evaluation."""
+        from aisec.core.exceptions import error_response
+
+        entry = _get_history().get_model_evaluation(evaluation_id)
+        if entry is None:
+            return Response(
+                error_response("EVALUATION_NOT_FOUND", f"Evaluation {evaluation_id} not found"),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = ModelRiskEvaluationRecordSerializer(entry)
+        return Response(serializer.data)
+
+    @api_view(["GET"])
+    def model_risk_evaluation_rollup(request: Any) -> Response:
+        """Return aggregate model-risk evaluation posture metrics."""
+        target_name = request.query_params.get("target_name")
+        rollup = _get_history().model_evaluation_rollup(target_name=target_name)
+        serializer = ModelRiskEvaluationRollupSerializer(rollup)
+        return Response(serializer.data)
+
+    @api_view(["GET", "POST"])
+    def model_risk_baselines(request: Any) -> Response:
+        """Create or list approved model-risk baselines."""
+        from aisec.core.exceptions import error_response
+
+        if request.method == "POST":
+            serializer = ModelRiskBaselineRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            validated = serializer.validated_data
+            evaluation = _get_history().get_model_evaluation(validated["evaluation_id"])
+            if evaluation is None:
+                return Response(
+                    error_response(
+                        "EVALUATION_NOT_FOUND",
+                        f"Evaluation {validated['evaluation_id']} not found",
+                    ),
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            baseline_id = _get_history().save_model_baseline(
+                validated["name"],
+                validated["target_name"],
+                validated["evaluation_id"],
+                validated.get("description", ""),
+            )
+            baseline = _get_history().get_model_baseline(baseline_id=baseline_id)
+            _audit_log(
+                "model_risk.baseline_created",
+                "model_risk_baseline",
+                baseline_id,
+                request,
+                f"name={validated['name']}; target={validated['target_name']}",
+            )
+            return Response(ModelRiskBaselineSerializer(baseline).data, status=status.HTTP_201_CREATED)
+
+        target_name = request.query_params.get("target_name")
+        baselines = _get_history().list_model_baselines(target_name=target_name)
+        serializer = ModelRiskBaselineSerializer(baselines, many=True)
+        return Response(serializer.data)
+
+    @api_view(["GET", "DELETE"])
+    def model_risk_baseline_detail(request: Any, baseline_id: str) -> Response:
+        """Retrieve or delete one approved model-risk baseline."""
+        from aisec.core.exceptions import error_response
+
+        baseline = _get_history().get_model_baseline(baseline_id=baseline_id)
+        if baseline is None:
+            return Response(
+                error_response("BASELINE_NOT_FOUND", f"Baseline {baseline_id} not found"),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if request.method == "DELETE":
+            _get_history().delete_model_baseline(baseline_id)
+            _audit_log("model_risk.baseline_deleted", "model_risk_baseline", baseline_id, request)
+            return Response({"detail": f"Baseline {baseline_id} deleted"})
+        return Response(ModelRiskBaselineSerializer(baseline).data)
+
+    @api_view(["POST"])
+    def compare_model_risk_baseline_view(request: Any, baseline_id: str) -> Response:
+        """Compare a current evaluation against a stored approved baseline."""
+        from pathlib import Path
+
+        from aisec.core.exceptions import error_response
+        from aisec.evaluation import ModelRiskEvaluationResult, compare_model_risk_baseline
+
+        serializer = ModelRiskBaselineCompareRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        baseline = _get_history().get_model_baseline(baseline_id=baseline_id)
+        if baseline is None:
+            return Response(
+                error_response("BASELINE_NOT_FOUND", f"Baseline {baseline_id} not found"),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        current = _get_history().get_model_evaluation(serializer.validated_data["current_evaluation_id"])
+        approved = _get_history().get_model_evaluation(baseline["evaluation_id"])
+        if current is None:
+            return Response(
+                error_response(
+                    "EVALUATION_NOT_FOUND",
+                    f"Evaluation {serializer.validated_data['current_evaluation_id']} not found",
+                ),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if approved is None:
+            return Response(
+                error_response(
+                    "EVALUATION_NOT_FOUND",
+                    f"Baseline evaluation {baseline['evaluation_id']} not found",
+                ),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        comparison = compare_model_risk_baseline(
+            baseline_path=Path(f"history:{approved['evaluation_id']}"),
+            current_path=Path(f"history:{current['evaluation_id']}"),
+            baseline=ModelRiskEvaluationResult.model_validate(approved["result"]),
+            current=ModelRiskEvaluationResult.model_validate(current["result"]),
+            accepted_fingerprints=_get_history().accepted_model_exception_fingerprints(
+                current["target_name"]
+            ),
+        )
+        return Response(comparison.model_dump(mode="json"))
+
+    @api_view(["GET", "POST"])
+    def model_risk_exceptions(request: Any) -> Response:
+        """Create or list accepted model-risk finding exceptions."""
+        if request.method == "POST":
+            serializer = ModelRiskExceptionRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            validated = serializer.validated_data
+            exception_id = _get_history().save_model_exception(
+                target_name=validated["target_name"],
+                finding_fingerprint=validated["finding_fingerprint"],
+                reason=validated["reason"],
+                accepted_by=validated.get("accepted_by", ""),
+                expires_at=validated.get("expires_at") or None,
+            )
+            exception = next(
+                row
+                for row in _get_history().list_model_exceptions(
+                    target_name=validated["target_name"],
+                    active_only=False,
+                )
+                if row["exception_id"] == exception_id
+            )
+            _audit_log(
+                "model_risk.exception_created",
+                "model_risk_exception",
+                exception_id,
+                request,
+                f"target={validated['target_name']}",
+            )
+            return Response(ModelRiskExceptionSerializer(exception).data, status=status.HTTP_201_CREATED)
+
+        target_name = request.query_params.get("target_name")
+        active_only = request.query_params.get("active", "true").lower() != "false"
+        exceptions = _get_history().list_model_exceptions(
+            target_name=target_name,
+            active_only=active_only,
+        )
+        return Response(ModelRiskExceptionSerializer(exceptions, many=True).data)
+
+    @api_view(["DELETE"])
+    def delete_model_risk_exception(request: Any, exception_id: str) -> Response:
+        """Deactivate an accepted model-risk exception."""
+        from aisec.core.exceptions import error_response
+
+        if not _get_history().delete_model_exception(exception_id):
+            return Response(
+                error_response("EXCEPTION_NOT_FOUND", f"Exception {exception_id} not found"),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        _audit_log("model_risk.exception_deleted", "model_risk_exception", exception_id, request)
+        return Response({"detail": f"Exception {exception_id} deleted"})
 
     # -- Prometheus metrics endpoint ------------------------------------------
 
@@ -473,6 +716,15 @@ def _get_views() -> dict[str, Any]:
         "webhooks": webhooks,
         "delete_webhook": delete_webhook,
         "batch_scan": batch_scan,
+        "evaluate_model_risk": evaluate_model_risk_view,
+        "list_model_risk_evaluations": list_model_risk_evaluations,
+        "get_model_risk_evaluation": get_model_risk_evaluation,
+        "model_risk_evaluation_rollup": model_risk_evaluation_rollup,
+        "model_risk_baselines": model_risk_baselines,
+        "model_risk_baseline_detail": model_risk_baseline_detail,
+        "compare_model_risk_baseline": compare_model_risk_baseline_view,
+        "model_risk_exceptions": model_risk_exceptions,
+        "delete_model_risk_exception": delete_model_risk_exception,
         "metrics_view": metrics_view,
         "schedules": schedules,
         "delete_schedule": delete_schedule,

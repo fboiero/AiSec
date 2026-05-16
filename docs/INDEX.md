@@ -14,12 +14,19 @@
 - [Orchestrator Integration Protocol](orchestai-integration-protocol.md): JSON contract and adapter guidance.
 - [Model-risk request schema](schemas/model-risk-request.schema.json): JSON Schema for requests.
 - [Model-risk result schema](schemas/model-risk-result.schema.json): JSON Schema for results.
+- API evaluation history: `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.
+- API evaluation rollup: `GET /api/evaluations/rollup/`.
+- API approved baselines: `GET/POST /api/evaluation-baselines/`.
+- API accepted exceptions: `GET/POST /api/evaluation-exceptions/`.
 
 ## Examples And Adapters
 
 - [Python subprocess adapter](examples/aisec_subprocess_adapter.py)
+- [HTTP adapter for `aisec serve`](examples/aisec_http_adapter.py)
 - [GitHub Actions model-risk gate](examples/github-actions-model-risk.yml)
 - [GitLab CI model-risk gate](examples/gitlab-model-risk.yml)
+- `aisec evaluate summarize`: generate Markdown/JSON summaries from model-risk result artifacts.
+- `aisec evaluate compare`: compare current model-risk evidence against an approved baseline.
 - [OrchestAI RAG request](examples/orchestai-model-risk-request.json)
 - [OrchestAI RAG result](examples/orchestai-model-risk-result.json)
 - [Generic model route request](examples/model-route-risk-request.json)

@@ -32,6 +32,25 @@ class TestOpenApiModule(unittest.TestCase):
         self.assertTrue(callable(views["schema_json"]))
         self.assertTrue(callable(views["swagger_ui"]))
 
+    @unittest.skipUnless(HAS_DRF, "DRF not installed")
+    def test_schema_json_includes_model_risk_endpoints(self):
+        from aisec.api.config import _configure_django
+        from aisec.api.schema import _get_schema_views
+
+        _configure_django()
+        from rest_framework.test import APIRequestFactory
+
+        request = APIRequestFactory().get("/api/schema/")
+        response = _get_schema_views()["schema_json"](request)
+        paths = response.data.get("paths", {})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/api/evaluate/model/", paths)
+        self.assertIn("/api/evaluations/", paths)
+        self.assertIn("/api/evaluations/rollup/", paths)
+        self.assertIn("/api/evaluation-baselines/", paths)
+        self.assertNotIn("/api/api/evaluate/model/", paths)
+
 
 class TestUrlsIncludeSchemaEndpoints(unittest.TestCase):
     """Verify that schema/docs URL patterns are registered."""

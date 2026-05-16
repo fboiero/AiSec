@@ -79,6 +79,87 @@ def _get_serializers() -> dict[str, Any]:
         language = serializers.CharField(
             default="en", help_text="Report language (en/es)")
 
+    class ModelRiskEvaluationRequestSerializer(serializers.Serializer):
+        schema_version = serializers.CharField(required=False)
+        request_id = serializers.CharField(required=False)
+        source = serializers.CharField(required=False)
+        target = serializers.DictField()
+        frameworks = serializers.ListField(child=serializers.CharField(), required=False)
+        context = serializers.DictField(required=False)
+        policy = serializers.DictField(required=False)
+
+    class ModelRiskEvaluationStatusSerializer(serializers.Serializer):
+        evaluation_id = serializers.CharField()
+        request_id = serializers.CharField()
+        target_name = serializers.CharField()
+        target_type = serializers.CharField()
+        provider = serializers.CharField(allow_blank=True, default="")
+        model_id = serializers.CharField(allow_blank=True, default="")
+        source = serializers.CharField(allow_blank=True, default="")
+        overall_risk = serializers.CharField()
+        risk_score = serializers.FloatField()
+        policy_verdict = serializers.CharField()
+        finding_count = serializers.IntegerField()
+        created_at = serializers.CharField()
+
+    class ModelRiskEvaluationRecordSerializer(serializers.Serializer):
+        evaluation_id = serializers.CharField()
+        request_id = serializers.CharField()
+        target_name = serializers.CharField()
+        target_type = serializers.CharField()
+        provider = serializers.CharField(allow_blank=True, default="")
+        model_id = serializers.CharField(allow_blank=True, default="")
+        source = serializers.CharField(allow_blank=True, default="")
+        overall_risk = serializers.CharField()
+        risk_score = serializers.FloatField()
+        policy_verdict = serializers.CharField()
+        finding_count = serializers.IntegerField()
+        created_at = serializers.CharField()
+        request = serializers.DictField()
+        result = serializers.DictField()
+
+    class ModelRiskEvaluationRollupSerializer(serializers.Serializer):
+        total_evaluations = serializers.IntegerField()
+        unique_targets = serializers.IntegerField()
+        average_risk_score = serializers.FloatField()
+        risk_counts = serializers.DictField()
+        policy_counts = serializers.DictField()
+        latest = serializers.ListField(child=serializers.DictField())
+
+    class ModelRiskBaselineRequestSerializer(serializers.Serializer):
+        name = serializers.CharField()
+        target_name = serializers.CharField()
+        evaluation_id = serializers.CharField()
+        description = serializers.CharField(required=False, allow_blank=True, default="")
+
+    class ModelRiskBaselineSerializer(serializers.Serializer):
+        baseline_id = serializers.CharField()
+        name = serializers.CharField()
+        target_name = serializers.CharField()
+        evaluation_id = serializers.CharField()
+        created_at = serializers.CharField()
+        description = serializers.CharField(allow_blank=True, default="")
+
+    class ModelRiskBaselineCompareRequestSerializer(serializers.Serializer):
+        current_evaluation_id = serializers.CharField()
+
+    class ModelRiskExceptionRequestSerializer(serializers.Serializer):
+        target_name = serializers.CharField()
+        finding_fingerprint = serializers.CharField()
+        reason = serializers.CharField()
+        accepted_by = serializers.CharField(required=False, allow_blank=True, default="")
+        expires_at = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+
+    class ModelRiskExceptionSerializer(serializers.Serializer):
+        exception_id = serializers.CharField()
+        target_name = serializers.CharField()
+        finding_fingerprint = serializers.CharField()
+        reason = serializers.CharField()
+        accepted_by = serializers.CharField(allow_blank=True, default="")
+        expires_at = serializers.CharField(allow_null=True, required=False)
+        created_at = serializers.CharField()
+        active = serializers.IntegerField()
+
     class AuditEventSerializer(serializers.Serializer):
         event_id = serializers.CharField()
         timestamp = serializers.CharField()
@@ -98,5 +179,14 @@ def _get_serializers() -> dict[str, Any]:
         "WebhookSerializer": WebhookSerializer,
         "WebhookResponseSerializer": WebhookResponseSerializer,
         "BatchScanRequestSerializer": BatchScanRequestSerializer,
+        "ModelRiskEvaluationRequestSerializer": ModelRiskEvaluationRequestSerializer,
+        "ModelRiskEvaluationStatusSerializer": ModelRiskEvaluationStatusSerializer,
+        "ModelRiskEvaluationRecordSerializer": ModelRiskEvaluationRecordSerializer,
+        "ModelRiskEvaluationRollupSerializer": ModelRiskEvaluationRollupSerializer,
+        "ModelRiskBaselineRequestSerializer": ModelRiskBaselineRequestSerializer,
+        "ModelRiskBaselineSerializer": ModelRiskBaselineSerializer,
+        "ModelRiskBaselineCompareRequestSerializer": ModelRiskBaselineCompareRequestSerializer,
+        "ModelRiskExceptionRequestSerializer": ModelRiskExceptionRequestSerializer,
+        "ModelRiskExceptionSerializer": ModelRiskExceptionSerializer,
         "AuditEventSerializer": AuditEventSerializer,
     }

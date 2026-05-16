@@ -5,12 +5,17 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1430 passed, 14 skipped`.
+- **Unit tests**: `1472 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
 - **Model-risk protocol**: `aisec.model_risk.v1`.
 - **Primary evaluator command**: `aisec evaluate model`.
+- **Primary evaluator API**: `POST /api/evaluate/model/`.
+- **Evaluator history API**: `GET /api/evaluations/`.
+- **Evaluator rollup API**: `GET /api/evaluations/rollup/`.
+- **Evaluator baseline API**: `GET/POST /api/evaluation-baselines/`.
+- **Evaluator exception API**: `GET/POST /api/evaluation-exceptions/`.
 - **Primary integration target**: OrchestAI-style model orchestration platforms.
 
 ## Main Product Shape
@@ -64,7 +69,27 @@ New/updated capabilities:
 - Added JSON schemas under `docs/schemas/`.
 - Added OrchestAI request/result examples.
 - Added subprocess adapter example.
+- Added HTTP adapter example for `aisec serve`.
 - Added GitHub Actions and GitLab CI model-risk examples.
+- Added `aisec evaluate summarize` for Markdown/JSON CI artifact summaries.
+- Added `aisec evaluate compare` for current-versus-approved baseline
+  comparisons.
+- Added persisted API-mode model-risk evaluation history.
+- Added API-mode approved baseline library and baseline comparison endpoint.
+- Added API-mode evaluation rollup for governance/posture screens.
+- Added API-mode accepted exceptions for model-risk finding fingerprints.
+- Fixed API schema/health initialization under real DRF installs.
+- Fixed lazy URL pattern reversibility for Django URL reversing.
+- Fixed OpenAPI generation dependencies and route base path so schema exposes
+  `/api/...` endpoints instead of `/api/api/...`.
+- Added DRF `APIClient` end-to-end coverage for model-risk evaluation history,
+  rollup, approved baseline creation, baseline comparison, accepted
+  exceptions, and deletion.
+- Added DRF `APIClient` negative-path coverage for missing evaluations,
+  missing baselines, invalid baseline creation bodies, and invalid comparison
+  bodies.
+- Local `.venv` is installed with `.[api,dev]`; editable import and
+  `.venv/bin/aisec` work without `PYTHONPATH`.
 - Documented advisory and blocking CI modes.
 
 Key files:
@@ -76,8 +101,10 @@ Key files:
 - `docs/examples/orchestai-model-risk-request.json`
 - `docs/examples/orchestai-model-risk-result.json`
 - `docs/examples/aisec_subprocess_adapter.py`
+- `docs/examples/aisec_http_adapter.py`
 - `docs/examples/github-actions-model-risk.yml`
 - `docs/examples/gitlab-model-risk.yml`
+- `src/aisec/evaluation/artifacts.py`
 
 Important behavior:
 
@@ -104,7 +131,7 @@ Registered in:
 CLI discovery:
 
 ```bash
-PYTHONPATH=src python3 -m aisec agents info agentic_review
+.venv/bin/aisec agents info agentic_review
 ```
 
 `agentic_review` detects:
@@ -165,19 +192,19 @@ Read in this order:
 Full unit suite:
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/ -q
+.venv/bin/python -m pytest tests/unit/ -q
 ```
 
 Model-risk:
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/test_model_risk_evaluation.py -q
+.venv/bin/python -m pytest tests/unit/test_model_risk_evaluation.py -q
 ```
 
 Agent-on-agent analysis:
 
 ```bash
-PYTHONPATH=src python3 -m pytest \
+.venv/bin/python -m pytest \
   tests/unit/agents/test_agentic_review_agent.py \
   tests/unit/test_agentic_review_correlation.py \
   -q
@@ -186,19 +213,19 @@ PYTHONPATH=src python3 -m pytest \
 Adapter and CI examples:
 
 ```bash
-PYTHONPATH=src python3 -m pytest \
+.venv/bin/python -m pytest \
   tests/unit/test_orchestrator_subprocess_adapter.py \
   tests/unit/test_ci_model_risk_examples.py \
   -q
 ```
 
-## Known Pending Cleanup
+## Current Iteration Notes
 
+- The v1.10.0 release is already published.
 - Duplicate untracked test files ending in ` 2.py` were compared against their
-  canonical counterparts and removed.
-- Review all untracked files before commit because this workspace contains many
-  newly created source, docs, and test files.
-- Commit, tag, push, and create the v1.10.0 release after a final full test run.
+  canonical counterparts and removed before release.
+- Service-to-service model-risk evaluation now has an API endpoint and a
+  standalone HTTP adapter example.
 
 ## Key Decisions
 

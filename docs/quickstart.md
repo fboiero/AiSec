@@ -47,9 +47,30 @@ aisec evaluate model \
 The result includes risk score, findings, framework mappings, evidence,
 recommendations, and a policy verdict.
 
+Create a Markdown summary from CI artifacts:
+
+```bash
+aisec evaluate summarize \
+  --input aisec-results \
+  --output aisec-results/model-risk-summary.md \
+  --format markdown
+```
+
+Compare a current result against an approved baseline:
+
+```bash
+aisec evaluate compare \
+  --baseline approved/model-risk-result.json \
+  --current aisec-results/model-risk-result.json \
+  --output aisec-results/model-risk-comparison.md \
+  --format markdown
+```
+
 CI advisory mode uses `--fail-on none` and always uploads the JSON result as
 evidence. CI blocking mode uses `--fail-on critical` or `--fail-on high`; the
-command exits with code `1` when the policy verdict is `fail`.
+command exits with code `1` when the policy verdict is `fail`. CI examples
+upload raw JSON evidence, the Markdown summary, and a baseline comparison when
+an approved baseline artifact exists.
 
 Export JSON Schemas for adapter validation:
 
@@ -103,6 +124,41 @@ Open:
 http://localhost:8000/dashboard/
 http://localhost:8000/api/docs/
 ```
+
+Model-risk API mode:
+
+```bash
+curl -sS \
+  -H 'Content-Type: application/json' \
+  --data @docs/examples/orchestai-model-risk-request.json \
+  http://localhost:8000/api/evaluate/model/
+```
+
+Persisted evaluation history:
+
+```text
+http://localhost:8000/api/evaluations/
+http://localhost:8000/api/evaluations/rollup/
+http://localhost:8000/api/evaluations/{evaluation_id}/
+```
+
+Approved model-risk baselines:
+
+```text
+http://localhost:8000/api/evaluation-baselines/
+http://localhost:8000/api/evaluation-baselines/{baseline_id}/compare/
+```
+
+Accepted model-risk exceptions:
+
+```text
+http://localhost:8000/api/evaluation-exceptions/
+http://localhost:8000/api/evaluation-exceptions/{exception_id}/
+```
+
+Create exceptions from comparison `new_findings[].fingerprint` values. Active,
+non-expired exceptions are applied automatically by baseline comparison and move
+matching new findings into `accepted_new_findings`.
 
 ## 4. Understand Results
 

@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 def _get_health_views() -> dict[str, Any]:
     """Return readiness and liveness view functions."""
+    from aisec.api.config import _configure_django
+
+    _configure_django()
+
     from rest_framework.decorators import api_view
     from rest_framework.response import Response
     from rest_framework import status

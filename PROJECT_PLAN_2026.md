@@ -30,7 +30,7 @@ As of May 2026:
 - Model-risk protocol: `aisec.model_risk.v1`.
 - Command: `aisec evaluate model`.
 - First integration target: OrchestAI.
-- Tests: 1,430 passing and 14 skipped according to local context.
+- Tests: 1,472 passing and 9 skipped in local `.venv` with `.[api,dev]`.
 - Correlation rules: 40 total, including 9 centered on `agentic_review`.
 
 ## 2026 Outcomes
@@ -50,10 +50,26 @@ Implemented in the local v1.10.0 workspace:
 - Descriptor-based model-risk evaluator with `aisec.model_risk.v1`.
 - Deterministic `ModelRiskEvaluationResult` JSON for the same request payload.
 - CLI schema export for request/result contracts.
+- API endpoint for service-to-service model-risk evaluation:
+  `POST /api/evaluate/model/`.
+- API-mode evaluation history for persisted model-risk evidence:
+  `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.
+- API-mode posture rollup:
+  `GET /api/evaluations/rollup/`.
+- Approved model-risk baseline library for API mode:
+  `GET/POST /api/evaluation-baselines/`.
+- Accepted model-risk exceptions for API mode:
+  `GET/POST /api/evaluation-exceptions/`.
 - Example OrchestAI request/result artifacts.
 - Python subprocess adapter handling missing binary, timeout, policy failure,
   and invalid output as distinct outcomes.
+- Python HTTP adapter for `aisec serve` handling endpoint errors, timeouts,
+  invalid output, and valid policy failures as distinct outcomes.
 - GitHub Actions and GitLab CI examples for advisory/blocking model-risk gates.
+- CI artifact parser and Markdown/JSON summary command for model-risk results.
+- Baseline comparison command for current versus approved model-risk evidence.
+- Baseline comparison separates accepted and unaccepted new findings so
+  governance gates can tolerate explicitly approved exceptions.
 - `agentic_review` meta-agent for agent-on-agent review, delegation, handoff,
   identity, memory, dissent, and human-escalation analysis.
 - 40 correlation rules, 9 centered on `agentic_review`.
@@ -99,7 +115,7 @@ Make AiSec useful across multiple AI orchestration products, not only OrchestAI.
 - Reference adapters:
   - Python subprocess adapter.
   - HTTP client adapter for `aisec serve`.
-  - CI artifact adapter.
+  - CI artifact summary adapter.
 - Profiles for common orchestrator targets:
   - LLM provider route.
   - RAG pipeline.
@@ -122,8 +138,7 @@ Move from one-off evaluations to continuous model-risk evidence and posture.
 
 ### Deliverables
 
-- Evaluation history model for API mode.
-- Baseline comparison for model-risk results.
+- Baseline promotion workflow in consuming governance UIs.
 - Risk trend rollups by target, provider, workflow, framework, and tenant.
 - Exception/acceptance metadata for policy gates.
 - Export packs for:

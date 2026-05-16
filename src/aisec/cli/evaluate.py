@@ -13,7 +13,14 @@ from aisec.cli.console import console
 from aisec.evaluation import (
     ModelRiskEvaluationRequest,
     ModelRiskEvaluationResult,
+    compare_model_risk_baseline,
+    discover_model_risk_artifacts,
     evaluate_model_risk,
+    load_single_model_risk_artifact,
+    load_model_risk_artifacts,
+    summarize_model_risk_artifacts,
+    write_model_risk_comparison,
+    write_model_risk_summary,
 )
 
 evaluate_app = typer.Typer(help="Evaluate model, agent, and RAG risk descriptors.")
@@ -99,3 +106,131 @@ def export_schema(
         path = output_dir / filename
         path.write_text(json.dumps(schema, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         console.print(f"[success]Wrote:[/success] {path.resolve()}")
+
+
+@evaluate_app.command("summarize")
+def summarize_artifacts(
+    inputs: Annotated[
+        list[Path],
+        typer.Option(
+            "--input",
+            "-i",
+            help="Model-risk result JSON file or directory containing result artifacts.",
+        ),
+    ],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Path to write summary artifact."),
+    ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Summary format: markdown or json."),
+    ] = "markdown",
+    top_limit: Annotated[
+        int,
+        typer.Option("--top", help="Maximum number of top findings to include."),
+    ] = 10,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict/--no-strict", help="Fail on invalid JSON files instead of skipping them."),
+    ] = True,
+) -> None:
+    """Summarize model-risk result artifacts for CI comments and evidence."""
+    if not inputs:
+        raise typer.BadParameter("At least one --input path is required.")
+    if output_format not in {"markdown", "json"}:
+        raise typer.BadParameter("--format must be 'markdown' or 'json'.")
+
+    paths = discover_model_risk_artifacts(inputs)
+    artifacts = load_model_risk_artifacts(paths, strict=strict)
+    summary = summarize_model_risk_artifacts(artifacts, top_limit=top_limit)
+
+    if output is None:
+        suffix = "md" if output_format == "markdown" else "json"
+        output = Path("aisec-results") / f"model-risk-summary.{suffix}"
+    summary_path = write_model_risk_summary(summary, output, output_format=output_format)
+
+    table = Table(title="AiSec Model-Risk Artifact Summary")
+    table.add_column("Artifacts", justify="right")
+    table.add_column("Highest Risk")
+    table.add_column("Worst Verdict")
+    table.add_column("Findings", justify="right")
+    table.add_row(
+        str(summary.artifact_count),
+        summary.highest_risk,
+        summary.worst_policy_verdict,
+        str(summary.total_findings),
+    )
+    console.print(table)
+    console.print(f"[success]Summary written to:[/success] {summary_path}")
+
+    if summary.worst_policy_verdict == "fail":
+        raise typer.Exit(code=1)
+
+
+@evaluate_app.command("compare")
+def compare_artifacts(
+    baseline: Annotated[
+        Path,
+        typer.Option("--baseline", help="Approved baseline ModelRiskEvaluationResult JSON."),
+    ],
+    current: Annotated[
+        Path,
+        typer.Option("--current", help="Current ModelRiskEvaluationResult JSON."),
+    ],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Path to write comparison artifact."),
+    ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Comparison format: markdown or json."),
+    ] = "markdown",
+    fail_on_regression: Annotated[
+        bool,
+        typer.Option(
+            "--fail-on-regression/--no-fail-on-regression",
+            help="Exit with code 1 when risk, verdict, or findings regress.",
+        ),
+    ] = False,
+) -> None:
+    """Compare a current model-risk result against an approved baseline."""
+    if output_format not in {"markdown", "json"}:
+        raise typer.BadParameter("--format must be 'markdown' or 'json'.")
+
+    baseline_result = load_single_model_risk_artifact(baseline)
+    current_result = load_single_model_risk_artifact(current)
+    comparison = compare_model_risk_baseline(
+        baseline_path=baseline.resolve(),
+        current_path=current.resolve(),
+        baseline=baseline_result,
+        current=current_result,
+    )
+
+    if output is None:
+        suffix = "md" if output_format == "markdown" else "json"
+        output = Path("aisec-results") / f"model-risk-comparison.{suffix}"
+    comparison_path = write_model_risk_comparison(comparison, output, output_format=output_format)
+
+    table = Table(title="AiSec Model-Risk Baseline Comparison")
+    table.add_column("Target")
+    table.add_column("Baseline")
+    table.add_column("Current")
+    table.add_column("Delta", justify="right")
+    table.add_column("New", justify="right")
+    table.add_column("Resolved", justify="right")
+    table.add_column("Regression")
+    table.add_row(
+        comparison.target_name,
+        comparison.baseline_risk,
+        comparison.current_risk,
+        f"{comparison.risk_score_delta:+.1f}",
+        str(len(comparison.new_findings)),
+        str(len(comparison.resolved_findings)),
+        "yes" if comparison.has_regression else "no",
+    )
+    console.print(table)
+    console.print(f"[success]Comparison written to:[/success] {comparison_path}")
+
+    if fail_on_regression and comparison.has_regression:
+        raise typer.Exit(code=1)

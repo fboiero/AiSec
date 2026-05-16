@@ -13,12 +13,13 @@ As of the current local workspace:
 - Version: `1.10.0`.
 - Branch: `main`.
 - Release target: `v1.10.0`.
-- Unit tests: `1430 passed, 14 skipped`.
+- Unit tests: `1472 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - Security agents: `36`.
 - Correlation rules: `40`.
 - Agent-on-agent correlation rules: `9`.
 - Model-risk schema version: `aisec.model_risk.v1`.
 - Primary integration command: `aisec evaluate model`.
+- Primary integration API: `POST /api/evaluate/model/`.
 - Primary integration target: OrchestAI-style model orchestration platforms.
 
 Important workspace note:
@@ -275,7 +276,8 @@ Recommended rollout:
 
 1. Advisory mode: `--fail-on none`, upload JSON artifact.
 2. Blocking mode for protected branches: start with `--fail-on critical`.
-3. Tighten to `--fail-on high` only after exception flow is defined.
+3. Tighten to `--fail-on high` after teams agree on accepted-exception
+   ownership and expiry policy.
 
 ## Deep Scan Path
 
@@ -454,19 +456,19 @@ Hook failures are isolated and should not crash scans.
 Run all unit tests:
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/ -q
+.venv/bin/python -m pytest tests/unit/ -q
 ```
 
 Run model-risk tests:
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/test_model_risk_evaluation.py -q
+.venv/bin/python -m pytest tests/unit/test_model_risk_evaluation.py -q
 ```
 
 Run agentic review tests:
 
 ```bash
-PYTHONPATH=src python3 -m pytest \
+.venv/bin/python -m pytest \
   tests/unit/agents/test_agentic_review_agent.py \
   tests/unit/test_agentic_review_correlation.py \
   -q
@@ -475,13 +477,13 @@ PYTHONPATH=src python3 -m pytest \
 Export schemas:
 
 ```bash
-PYTHONPATH=src python3 -m aisec evaluate schema --output-dir docs/schemas
+.venv/bin/aisec evaluate schema --output-dir docs/schemas
 ```
 
 Smoke the OrchestAI example:
 
 ```bash
-PYTHONPATH=src python3 -m aisec evaluate model \
+.venv/bin/aisec evaluate model \
   --input docs/examples/orchestai-model-risk-request.json \
   --output /tmp/aisec-model-risk-result.json \
   --fail-on none \
@@ -491,8 +493,8 @@ PYTHONPATH=src python3 -m aisec evaluate model \
 List agents:
 
 ```bash
-PYTHONPATH=src python3 -m aisec agents list
-PYTHONPATH=src python3 -m aisec agents info agentic_review
+.venv/bin/aisec agents list
+.venv/bin/aisec agents info agentic_review
 ```
 
 ## Key Files For Integrators
@@ -513,6 +515,8 @@ Code entry points:
 ```text
 src/aisec/cli/app.py
 src/aisec/cli/evaluate.py
+src/aisec/api/views.py
+src/aisec/api/urls.py
 src/aisec/evaluation/models.py
 src/aisec/evaluation/evaluator.py
 src/aisec/agents/registry.py
@@ -536,12 +540,42 @@ Operational release steps:
 
 Next product iterations:
 
-- HTTP adapter example for `aisec serve`.
-- CI artifact parser/summary for model-risk results.
-- API endpoint for `ModelRiskEvaluationRequest` if service-to-service mode is
-  prioritized.
-- Baseline comparison for model-risk results.
-- Evaluation history model for API mode.
+- Baseline promotion workflow in OrchestAI UI.
+
+Completed after v1.10.0 release:
+
+- Added service-to-service model-risk endpoint:
+  `POST /api/evaluate/model/`.
+- Added standalone HTTP adapter example:
+  `docs/examples/aisec_http_adapter.py`.
+- Added CI artifact parser and summary command:
+  `aisec evaluate summarize`.
+- Added baseline comparison command for approved model-risk evidence:
+  `aisec evaluate compare`.
+- Added API-mode evaluation history:
+  `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.
+- Added governance rollup endpoint:
+  `GET /api/evaluations/rollup/`.
+- Added approved model-risk baseline library:
+  `GET/POST /api/evaluation-baselines/` and
+  `POST /api/evaluation-baselines/{baseline_id}/compare/`.
+- Added accepted model-risk exceptions:
+  `GET/POST /api/evaluation-exceptions/` and
+  `DELETE /api/evaluation-exceptions/{exception_id}/`.
+- Exception acceptance is scoped by `target_name` and finding fingerprint;
+  `expires_at` is honored when active exceptions are listed or applied.
+- Baseline comparison now separates `accepted_new_findings` and
+  `unaccepted_new_findings`; `has_regression` means an unaccepted regression
+  remains, while `risk_regressed` and `policy_regressed` stay visible as
+  posture signals.
+- Local `.venv` is installed with `.[api,dev]`; `.venv/bin/python` imports
+  `aisec` and `.venv/bin/aisec` works without `PYTHONPATH`.
+- OpenAPI generation is validated with real DRF dependencies and should expose
+  `/api/...` paths, not `/api/api/...`.
+- DRF `APIClient` end-to-end tests cover model-risk evaluation, history,
+  rollup, approved baselines, accepted exceptions, comparison, and deletion.
+- DRF `APIClient` negative-path tests cover missing evaluations, missing
+  baselines, invalid baseline bodies, and invalid comparison bodies.
 
 ## Invariants For Future Agents
 

@@ -122,16 +122,17 @@ This is lower friction than selling a complete governance platform immediately.
 
 ### Days 31-60
 
-- Add API endpoint for model-risk evaluation.
-- Add baseline comparison for evaluation results.
-- Add Markdown summary renderer for model-risk results.
-- Add GitLab MR artifact example.
-- Validate against two OrchestAI use cases.
+- Completed: API endpoint for model-risk evaluation.
+- Completed: baseline comparison for evaluation results.
+- Completed: Markdown/JSON summary renderer for model-risk results.
+- Completed: GitHub Actions and GitLab CI artifact examples.
+- Completed: API-mode evaluation history, posture rollup, and approved
+  baseline library.
+- Completed: API-mode exception/acceptance metadata for finding fingerprints.
+- Next: validate against two OrchestAI use cases.
 
 ### Days 61-90
 
-- Add evaluation history.
-- Add exception/acceptance metadata.
 - Add framework evidence exports.
 - Prepare reusable adapter guide for other orchestrators.
 - Define managed deployment path.

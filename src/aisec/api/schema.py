@@ -7,6 +7,10 @@ from typing import Any
 
 def _get_schema_views() -> dict[str, Any]:
     """Return view functions for OpenAPI schema and Swagger UI."""
+    from aisec.api.config import _configure_django
+
+    _configure_django()
+
     from rest_framework.decorators import api_view
     from rest_framework.response import Response
     from django.http import HttpResponse
@@ -17,7 +21,7 @@ def _get_schema_views() -> dict[str, Any]:
         from rest_framework.schemas.openapi import SchemaGenerator
         import aisec
 
-        generator = SchemaGenerator(title="AiSec API", url="/api/")
+        generator = SchemaGenerator(title="AiSec API", url="/")
         schema = generator.get_schema(request=request)
         if schema is None:
             schema = {}

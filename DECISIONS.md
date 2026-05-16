@@ -27,7 +27,25 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Agents: 36.
 - Correlation rules: 40.
 - Agentic review correlation rules: 9.
-- Unit tests: 1430 passed, 14 skipped.
+- Added service-to-service model-risk endpoint: `POST /api/evaluate/model/`.
+- Added standalone HTTP adapter example for `aisec serve`.
+- Added `aisec evaluate summarize` for CI artifact Markdown/JSON rollups.
+- Added `aisec evaluate compare` for approved-baseline regression checks.
+- Added API-mode model-risk evaluation history in SQLite.
+- Added API-mode approved baseline library for model-risk evaluations.
+- Added API-mode evaluation rollup for governance/posture dashboards.
+- Added API-mode accepted exceptions for finding fingerprints; comparison keeps
+  `risk_regressed` and `policy_regressed` as signals, while `has_regression`
+  means an unaccepted regression remains.
+- Fixed DRF-installed API initialization so schema/health views configure
+  Django before accessing REST framework settings.
+- Fixed lazy URL pattern reversibility for Django `reverse()` and route tests.
+- Added OpenAPI support dependencies to the `api` extra and fixed schema path
+  generation to avoid `/api/api/...` routes.
+- Added DRF `APIClient` end-to-end coverage for the model-risk API workflow,
+  including accepted exceptions.
+- Added DRF `APIClient` negative-path coverage for model-risk API errors.
+- Unit tests: 1472 passed, 9 skipped in local `.venv` with `.[api,dev]`.
 
 ---
 

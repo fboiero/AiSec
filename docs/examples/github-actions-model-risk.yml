@@ -16,7 +16,10 @@ jobs:
       contents: read
     env:
       AISEC_REQUEST: docs/examples/orchestai-model-risk-request.json
+      AISEC_BASELINE: docs/examples/orchestai-model-risk-result.json
       AISEC_RESULT: aisec-results/model-risk-result.json
+      AISEC_SUMMARY: aisec-results/model-risk-summary.md
+      AISEC_COMPARISON: aisec-results/model-risk-comparison.md
       AISEC_FAIL_ON: critical
     steps:
       - name: Checkout
@@ -39,10 +42,33 @@ jobs:
             --fail-on "$AISEC_FAIL_ON" \
             --quiet
 
+      - name: Summarize model-risk artifact
+        if: always()
+        run: |
+          aisec evaluate summarize \
+            --input "$AISEC_RESULT" \
+            --output "$AISEC_SUMMARY" \
+            --format markdown \
+            --no-strict
+
+      - name: Compare against approved baseline
+        if: always()
+        run: |
+          if [ -f "$AISEC_BASELINE" ]; then
+            aisec evaluate compare \
+              --baseline "$AISEC_BASELINE" \
+              --current "$AISEC_RESULT" \
+              --output "$AISEC_COMPARISON" \
+              --format markdown
+          fi
+
       - name: Upload model-risk evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aisec-model-risk
-          path: aisec-results/model-risk-result.json
+          path: |
+            aisec-results/model-risk-result.json
+            aisec-results/model-risk-summary.md
+            aisec-results/model-risk-comparison.md
           if-no-files-found: warn

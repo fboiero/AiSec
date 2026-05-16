@@ -5,6 +5,35 @@ All notable changes to AiSec are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `POST /api/evaluate/model/` for service-to-service model-risk evaluation
+  using the existing `ModelRiskEvaluationRequest` and
+  `ModelRiskEvaluationResult` contract.
+- Standalone HTTP adapter example for `aisec serve` at
+  `docs/examples/aisec_http_adapter.py`.
+- `aisec evaluate summarize` to parse model-risk result artifacts and write
+  Markdown or JSON CI summaries.
+- `aisec evaluate compare` to compare current model-risk evidence against an
+  approved baseline and optionally fail CI on regression.
+- API-mode evaluation history for model-risk evidence via
+  `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.
+- API-mode approved baseline library via `GET/POST /api/evaluation-baselines/`
+  and `POST /api/evaluation-baselines/{baseline_id}/compare/`.
+- API-mode posture rollup via `GET /api/evaluations/rollup/`.
+- API-mode accepted model-risk exceptions via
+  `GET/POST /api/evaluation-exceptions/`, with baseline comparison separating
+  accepted and unaccepted new findings.
+- API routing and schema/health view initialization now configure Django before
+  touching DRF settings, and lazy URL patterns support Django `reverse()`.
+- `api` extra now includes OpenAPI support dependencies and schema generation
+  publishes `/api/...` paths without duplicate `/api/api/...` prefixes.
+- End-to-end DRF API tests now cover model-risk evaluation, persisted history,
+  rollup, approved baselines, accepted exceptions, comparison, and deletion.
+- DRF API negative-path tests now cover missing evaluations/baselines and
+  invalid baseline/comparison request bodies.
+
 ## [1.10.0] - 2026-02-25
 
 ### Added
