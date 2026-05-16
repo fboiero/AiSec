@@ -72,6 +72,21 @@ The summary command accepts JSON files or directories, validates
 `ModelRiskEvaluationResult` artifacts, and writes a compact rollup with target,
 risk, verdict, severity counts, and top findings.
 
+Export framework-specific evidence for compliance records:
+
+```bash
+aisec evaluate evidence \
+  --input aisec-results \
+  --output aisec-results/model-risk-framework-evidence.md \
+  --format markdown \
+  --framework gdpr \
+  --framework owasp_llm
+```
+
+The evidence export groups findings, evidence summaries, targets, severity
+counts, and framework statuses by framework key. Omit `--framework` to export
+all frameworks found in the result artifacts.
+
 Compare a current result against an approved baseline:
 
 ```bash

@@ -16,10 +16,12 @@ from aisec.evaluation import (
     compare_model_risk_baseline,
     discover_model_risk_artifacts,
     evaluate_model_risk,
+    export_model_risk_framework_evidence,
     load_single_model_risk_artifact,
     load_model_risk_artifacts,
     summarize_model_risk_artifacts,
     write_model_risk_comparison,
+    write_model_risk_framework_evidence,
     write_model_risk_summary,
 )
 
@@ -166,6 +168,64 @@ def summarize_artifacts(
 
     if summary.worst_policy_verdict == "fail":
         raise typer.Exit(code=1)
+
+
+@evaluate_app.command("evidence")
+def export_framework_evidence(
+    inputs: Annotated[
+        list[Path],
+        typer.Option(
+            "--input",
+            "-i",
+            help="Model-risk result JSON file or directory containing result artifacts.",
+        ),
+    ],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Path to write framework evidence artifact."),
+    ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Evidence format: markdown or json."),
+    ] = "markdown",
+    framework_filters: Annotated[
+        list[str] | None,
+        typer.Option("--framework", help="Limit export to a framework key such as gdpr or owasp_llm."),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict/--no-strict", help="Fail on invalid JSON files instead of skipping them."),
+    ] = True,
+) -> None:
+    """Export model-risk evidence grouped by governance framework."""
+    if not inputs:
+        raise typer.BadParameter("At least one --input path is required.")
+    if output_format not in {"markdown", "json"}:
+        raise typer.BadParameter("--format must be 'markdown' or 'json'.")
+
+    paths = discover_model_risk_artifacts(inputs)
+    artifacts = load_model_risk_artifacts(paths, strict=strict)
+    export = export_model_risk_framework_evidence(
+        artifacts,
+        frameworks=set(framework_filters or []),
+    )
+
+    if output is None:
+        suffix = "md" if output_format == "markdown" else "json"
+        output = Path("aisec-results") / f"model-risk-framework-evidence.{suffix}"
+    evidence_path = write_model_risk_framework_evidence(export, output, output_format=output_format)
+
+    table = Table(title="AiSec Model-Risk Framework Evidence")
+    table.add_column("Artifacts", justify="right")
+    table.add_column("Frameworks", justify="right")
+    table.add_column("Findings", justify="right")
+    table.add_row(
+        str(export.artifact_count),
+        str(len(export.frameworks)),
+        str(sum(report.finding_count for report in export.frameworks)),
+    )
+    console.print(table)
+    console.print(f"[success]Framework evidence written to:[/success] {evidence_path}")
 
 
 @evaluate_app.command("compare")

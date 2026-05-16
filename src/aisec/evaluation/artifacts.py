@@ -56,6 +56,37 @@ class ModelRiskFindingDelta(BaseModel):
     target_name: str
 
 
+class ModelRiskFrameworkFindingEvidence(BaseModel):
+    """Finding evidence normalized for a framework-specific export."""
+
+    target_name: str
+    request_id: str
+    evaluation_id: str
+    finding_id: str
+    title: str
+    severity: str
+    evidence: list[str] = Field(default_factory=list)
+    remediation: str = ""
+
+
+class ModelRiskFrameworkReport(BaseModel):
+    """Evidence packet for one governance framework."""
+
+    framework: str
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    severity_counts: dict[str, int] = Field(default_factory=dict)
+    target_names: list[str] = Field(default_factory=list)
+    finding_count: int = 0
+    findings: list[ModelRiskFrameworkFindingEvidence] = Field(default_factory=list)
+
+
+class ModelRiskFrameworkEvidenceExport(BaseModel):
+    """Framework-grouped evidence export across model-risk artifacts."""
+
+    artifact_count: int
+    frameworks: list[ModelRiskFrameworkReport] = Field(default_factory=list)
+
+
 class ModelRiskBaselineComparison(BaseModel):
     """Comparison between one current result and one approved baseline."""
 
@@ -187,6 +218,76 @@ def summarize_model_risk_artifacts(
         framework_counts=framework_counts,
         targets=targets,
         top_findings=top_findings[:top_limit],
+    )
+
+
+def export_model_risk_framework_evidence(
+    artifacts: list[tuple[Path, ModelRiskEvaluationResult]],
+    *,
+    frameworks: set[str] | None = None,
+) -> ModelRiskFrameworkEvidenceExport:
+    """Group model-risk findings and evidence by compliance framework."""
+    reports: dict[str, ModelRiskFrameworkReport] = {}
+    requested_frameworks = frameworks or set()
+
+    for _path, result in artifacts:
+        for framework_result in result.frameworks:
+            if requested_frameworks and framework_result.framework not in requested_frameworks:
+                continue
+            report = reports.setdefault(
+                framework_result.framework,
+                ModelRiskFrameworkReport(
+                    framework=framework_result.framework,
+                    status_counts={verdict: 0 for verdict in VERDICT_ORDER},
+                    severity_counts={severity.value: 0 for severity in Severity},
+                ),
+            )
+            report.status_counts[framework_result.status] = report.status_counts.get(framework_result.status, 0) + 1
+            if result.target.name not in report.target_names:
+                report.target_names.append(result.target.name)
+
+        for finding in result.findings:
+            for framework in finding.frameworks:
+                if requested_frameworks and framework not in requested_frameworks:
+                    continue
+                report = reports.setdefault(
+                    framework,
+                    ModelRiskFrameworkReport(
+                        framework=framework,
+                        status_counts={verdict: 0 for verdict in VERDICT_ORDER},
+                        severity_counts={severity.value: 0 for severity in Severity},
+                    ),
+                )
+                if result.target.name not in report.target_names:
+                    report.target_names.append(result.target.name)
+                report.severity_counts[finding.severity.value] = report.severity_counts.get(finding.severity.value, 0) + 1
+                report.findings.append(
+                    ModelRiskFrameworkFindingEvidence(
+                        target_name=result.target.name,
+                        request_id=result.request_id,
+                        evaluation_id=result.evaluation_id,
+                        finding_id=finding.id,
+                        title=finding.title,
+                        severity=finding.severity.value,
+                        evidence=[evidence.summary for evidence in finding.evidence],
+                        remediation=finding.remediation,
+                    )
+                )
+
+    for report in reports.values():
+        report.target_names = sorted(report.target_names)
+        report.findings.sort(
+            key=lambda finding: (
+                RISK_ORDER.index(finding.severity),
+                finding.target_name,
+                finding.title,
+            )
+        )
+        report.finding_count = len(report.findings)
+
+    return ModelRiskFrameworkEvidenceExport(
+        artifact_count=len(artifacts),
+        frameworks=sorted(reports.values(), key=lambda report: report.framework),
     )
 
 
@@ -366,6 +467,69 @@ def write_model_risk_summary(summary: ModelRiskArtifactSummary, output: Path, *,
         output.write_text(render_model_risk_summary_markdown(summary), encoding="utf-8")
     else:
         raise ValueError(f"Unsupported summary format: {output_format}")
+    return output.resolve()
+
+
+def render_model_risk_framework_evidence_markdown(export: ModelRiskFrameworkEvidenceExport) -> str:
+    """Render framework evidence as Markdown for compliance reviews."""
+    lines = [
+        "# AiSec Framework Evidence Export",
+        "",
+        f"- Artifacts: {export.artifact_count}",
+        f"- Frameworks: {len(export.frameworks)}",
+        "",
+    ]
+
+    for report in export.frameworks:
+        lines.extend(
+            [
+                f"## {report.framework}",
+                "",
+                f"- Targets: {', '.join(_md(target) for target in report.target_names) if report.target_names else '-'}",
+                f"- Findings: {report.finding_count}",
+                "",
+                "| Severity | Count |",
+                "| --- | ---: |",
+            ]
+        )
+        for severity in RISK_ORDER:
+            lines.append(f"| {severity} | {report.severity_counts.get(severity, 0)} |")
+
+        lines.extend(["", "| Severity | Target | Finding | Evidence |", "| --- | --- | --- | --- |"])
+        if report.findings:
+            for finding in report.findings:
+                evidence = "; ".join(finding.evidence) if finding.evidence else "-"
+                lines.append(
+                    "| "
+                    f"{finding.severity} | "
+                    f"{_md(finding.target_name)} | "
+                    f"{_md(finding.title)} | "
+                    f"{_md(evidence)} |"
+                )
+        else:
+            lines.append("| - | - | No findings. | - |")
+        lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def write_model_risk_framework_evidence(
+    export: ModelRiskFrameworkEvidenceExport,
+    output: Path,
+    *,
+    output_format: str,
+) -> Path:
+    """Write framework evidence as Markdown or JSON."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output_format == "json":
+        output.write_text(
+            json.dumps(export.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    elif output_format == "markdown":
+        output.write_text(render_model_risk_framework_evidence_markdown(export), encoding="utf-8")
+    else:
+        raise ValueError(f"Unsupported framework evidence format: {output_format}")
     return output.resolve()
 
 

@@ -11,10 +11,12 @@ from aisec.evaluation import (
     compare_model_risk_baseline,
     discover_model_risk_artifacts,
     evaluate_model_risk,
+    export_model_risk_framework_evidence,
     fingerprint_model_risk_finding,
     load_model_risk_artifacts,
     load_single_model_risk_artifact,
     render_model_risk_comparison_markdown,
+    render_model_risk_framework_evidence_markdown,
     render_model_risk_summary_markdown,
     summarize_model_risk_artifacts,
 )
@@ -180,6 +182,53 @@ def test_evaluate_summarize_cli_writes_json(tmp_path: Path) -> None:
     data = json.loads(output.read_text(encoding="utf-8"))
     assert data["artifact_count"] == 1
     assert data["targets"][0]["target_name"] == "Customer RAG"
+
+
+def test_export_model_risk_framework_evidence_groups_findings(tmp_path: Path) -> None:
+    artifact = tmp_path / "result.json"
+    _write_result(artifact, _request("Customer RAG", request_id="framework-evidence"))
+
+    export = export_model_risk_framework_evidence(
+        load_model_risk_artifacts([artifact]),
+        frameworks={"gdpr"},
+    )
+    markdown = render_model_risk_framework_evidence_markdown(export)
+
+    assert export.artifact_count == 1
+    assert [report.framework for report in export.frameworks] == ["gdpr"]
+    assert export.frameworks[0].finding_count > 0
+    assert export.frameworks[0].target_names == ["Customer RAG"]
+    assert "# AiSec Framework Evidence Export" in markdown
+    assert "## gdpr" in markdown
+    assert "Customer RAG" in markdown
+
+
+def test_evaluate_evidence_cli_writes_json(tmp_path: Path) -> None:
+    artifact = tmp_path / "result.json"
+    output = tmp_path / "framework-evidence.json"
+    _write_result(artifact, _request("Customer RAG", request_id="evidence-cli"))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "evaluate",
+            "evidence",
+            "--input",
+            str(artifact),
+            "--output",
+            str(output),
+            "--format",
+            "json",
+            "--framework",
+            "gdpr",
+        ],
+    )
+
+    assert result.exit_code == 0
+    data = json.loads(output.read_text(encoding="utf-8"))
+    assert data["artifact_count"] == 1
+    assert data["frameworks"][0]["framework"] == "gdpr"
+    assert data["frameworks"][0]["findings"]
 
 
 def test_load_model_risk_artifacts_can_skip_invalid_json(tmp_path: Path) -> None:

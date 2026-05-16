@@ -13,7 +13,7 @@ As of the current local workspace:
 - Version: `1.10.0`.
 - Branch: `main`.
 - Release target: `v1.10.0`.
-- Unit tests: `1472 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- Unit tests: `1474 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - Security agents: `36`.
 - Correlation rules: `40`.
 - Agent-on-agent correlation rules: `9`.
@@ -550,6 +550,8 @@ Completed after v1.10.0 release:
   `docs/examples/aisec_http_adapter.py`.
 - Added CI artifact parser and summary command:
   `aisec evaluate summarize`.
+- Added framework evidence export command:
+  `aisec evaluate evidence`.
 - Added baseline comparison command for approved model-risk evidence:
   `aisec evaluate compare`.
 - Added API-mode evaluation history:

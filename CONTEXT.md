@@ -5,7 +5,7 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1472 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- **Unit tests**: `1474 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
@@ -72,6 +72,7 @@ New/updated capabilities:
 - Added HTTP adapter example for `aisec serve`.
 - Added GitHub Actions and GitLab CI model-risk examples.
 - Added `aisec evaluate summarize` for Markdown/JSON CI artifact summaries.
+- Added `aisec evaluate evidence` for framework-grouped compliance evidence.
 - Added `aisec evaluate compare` for current-versus-approved baseline
   comparisons.
 - Added persisted API-mode model-risk evaluation history.

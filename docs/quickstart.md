@@ -56,6 +56,16 @@ aisec evaluate summarize \
   --format markdown
 ```
 
+Export framework-specific evidence for audit/compliance:
+
+```bash
+aisec evaluate evidence \
+  --input aisec-results \
+  --output aisec-results/model-risk-framework-evidence.md \
+  --format markdown \
+  --framework gdpr
+```
+
 Compare a current result against an approved baseline:
 
 ```bash

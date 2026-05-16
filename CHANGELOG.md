@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/examples/aisec_http_adapter.py`.
 - `aisec evaluate summarize` to parse model-risk result artifacts and write
   Markdown or JSON CI summaries.
+- `aisec evaluate evidence` to export model-risk findings and evidence grouped
+  by governance framework for compliance records.
 - `aisec evaluate compare` to compare current model-risk evidence against an
   approved baseline and optionally fail CI on regression.
 - API-mode evaluation history for model-risk evidence via

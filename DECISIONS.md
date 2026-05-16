@@ -30,6 +30,7 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added service-to-service model-risk endpoint: `POST /api/evaluate/model/`.
 - Added standalone HTTP adapter example for `aisec serve`.
 - Added `aisec evaluate summarize` for CI artifact Markdown/JSON rollups.
+- Added `aisec evaluate evidence` for framework-grouped compliance evidence.
 - Added `aisec evaluate compare` for approved-baseline regression checks.
 - Added API-mode model-risk evaluation history in SQLite.
 - Added API-mode approved baseline library for model-risk evaluations.
@@ -45,7 +46,7 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added DRF `APIClient` end-to-end coverage for the model-risk API workflow,
   including accepted exceptions.
 - Added DRF `APIClient` negative-path coverage for model-risk API errors.
-- Unit tests: 1472 passed, 9 skipped in local `.venv` with `.[api,dev]`.
+- Unit tests: 1474 passed, 9 skipped in local `.venv` with `.[api,dev]`.
 
 ---
 

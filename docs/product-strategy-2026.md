@@ -129,11 +129,11 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: API-mode evaluation history, posture rollup, and approved
   baseline library.
 - Completed: API-mode exception/acceptance metadata for finding fingerprints.
+- Completed: framework evidence exports for model-risk artifacts.
 - Next: validate against two OrchestAI use cases.
 
 ### Days 61-90
 
-- Add framework evidence exports.
 - Prepare reusable adapter guide for other orchestrators.
 - Define managed deployment path.
 

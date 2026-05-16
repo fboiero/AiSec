@@ -26,6 +26,7 @@
 - [GitHub Actions model-risk gate](examples/github-actions-model-risk.yml)
 - [GitLab CI model-risk gate](examples/gitlab-model-risk.yml)
 - `aisec evaluate summarize`: generate Markdown/JSON summaries from model-risk result artifacts.
+- `aisec evaluate evidence`: export model-risk evidence grouped by governance framework.
 - `aisec evaluate compare`: compare current model-risk evidence against an approved baseline.
 - [OrchestAI RAG request](examples/orchestai-model-risk-request.json)
 - [OrchestAI RAG result](examples/orchestai-model-risk-result.json)
