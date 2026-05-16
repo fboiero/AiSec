@@ -73,6 +73,13 @@ curl -sS \
   http://localhost:8000/api/evaluate/model/
 ```
 
+Or run the managed API smoke script:
+
+```bash
+AISEC_BASE_URL=http://localhost:8000 \
+  scripts/smoke-managed-api.sh
+```
+
 ## Kubernetes Pilot
 
 ```bash
@@ -145,6 +152,7 @@ Before go-live:
 - `GET /api/ready/` returns 200.
 - `POST /api/evaluate/model/` stores a model-risk evaluation.
 - `GET /api/evaluations/rollup/` returns posture data.
+- `scripts/smoke-managed-api.sh` passes against the deployed service URL.
 - Baseline creation and comparison work for one approved target.
 - Exception creation and expiry behavior are tested.
 - Persistent volume survives pod restart.
@@ -155,10 +163,11 @@ Before go-live:
 
 1. Deploy the new image tag into staging.
 2. Run the two validated OrchestAI use cases.
-3. Verify `/api/schema/` for expected paths.
-4. Confirm existing evaluations, baselines, and exceptions still list.
-5. Promote to production with a rolling update.
-6. Keep the previous image tag available for rollback.
+3. Run `scripts/smoke-managed-api.sh` against the staging URL.
+4. Verify `/api/schema/` for expected paths.
+5. Confirm existing evaluations, baselines, and exceptions still list.
+6. Promote to production with a rolling update.
+7. Keep the previous image tag available for rollback.
 
 ## Current Asset Status
 

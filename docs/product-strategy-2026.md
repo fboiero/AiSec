@@ -133,10 +133,11 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: validation against two OrchestAI use cases.
 - Completed: reusable adapter guide for other orchestrators.
 - Completed: managed deployment path for service-mode AiSec.
+- Completed: managed API smoke script for external pilots.
 
 ### Days 61-90
 
-- Harden managed deployment path for external pilots.
+- Harden external pilot operations and rollback evidence.
 
 ## Success Metrics
 

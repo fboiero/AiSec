@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   errors, storage, baselines, exceptions, and UI fields.
 - Managed deployment guide for service-mode AiSec, plus Compose/Kubernetes/Helm
   assets aligned with current image and health probes.
+- Managed API smoke script for external pilots:
+  `scripts/smoke-managed-api.sh`.
 - `aisec evaluate compare` to compare current model-risk evidence against an
   approved baseline and optionally fail CI on regression.
 - API-mode evaluation history for model-risk evidence via

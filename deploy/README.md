@@ -16,6 +16,12 @@ Open `http://localhost:8000/dashboard/` to access the web UI. Health probes are
 available at `http://localhost:8000/api/live/` and
 `http://localhost:8000/api/ready/`.
 
+Run the managed API smoke check:
+
+```bash
+AISEC_BASE_URL=http://localhost:8000 ../scripts/smoke-managed-api.sh
+```
+
 ### Kubernetes (raw manifests)
 
 ```bash

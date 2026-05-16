@@ -5,7 +5,7 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1479 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- **Unit tests**: `1481 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
@@ -75,6 +75,7 @@ New/updated capabilities:
 - Added reusable orchestrator adapter guide for non-OrchestAI integrations.
 - Added managed deployment guide and aligned Compose/Kubernetes/Helm probes
   with current service endpoints.
+- Added managed API smoke script for pilot deployments.
 - Added GitHub Actions and GitLab CI model-risk examples.
 - Added `aisec evaluate summarize` for Markdown/JSON CI artifact summaries.
 - Added `aisec evaluate evidence` for framework-grouped compliance evidence.
