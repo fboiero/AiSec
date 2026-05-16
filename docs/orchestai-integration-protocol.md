@@ -280,6 +280,7 @@ API-mode evaluations are persisted as evidence records. Retrieve them with:
 ```http
 GET /api/evaluations/
 GET /api/evaluations/rollup/
+GET /api/evaluations/trends/
 GET /api/evaluations/{evaluation_id}/
 ```
 
@@ -288,6 +289,8 @@ GET /api/evaluations/{evaluation_id}/
 returns the stored request and full result JSON. The rollup endpoint returns
 posture metrics for governance screens: total evaluations, unique targets,
 average risk score, risk counts, policy verdict counts, and latest evaluations.
+The trends endpoint groups posture by target, provider, project, framework, and
+day so governance screens can show model-risk movement over time.
 
 Approved baselines can be stored from persisted evaluations:
 

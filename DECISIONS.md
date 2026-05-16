@@ -45,6 +45,8 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added API-mode model-risk evaluation history in SQLite.
 - Added API-mode approved baseline library for model-risk evaluations.
 - Added API-mode evaluation rollup for governance/posture dashboards.
+- Added API-mode evaluation trends for target, provider, project, framework,
+  and daily posture dashboards.
 - Added API-mode accepted exceptions for finding fingerprints; comparison keeps
   `risk_regressed` and `policy_regressed` as signals, while `has_regression`
   means an unaccepted regression remains.
@@ -56,7 +58,7 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added DRF `APIClient` end-to-end coverage for the model-risk API workflow,
   including accepted exceptions.
 - Added DRF `APIClient` negative-path coverage for model-risk API errors.
-- Unit tests: 1489 passed, 9 skipped in local `.venv` with `.[api,dev]`.
+- Unit tests: 1491 passed, 9 skipped in local `.venv` with `.[api,dev]`.
 
 ---
 

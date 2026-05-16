@@ -54,6 +54,7 @@ def test_model_risk_api_end_to_end_evaluate_history_rollup(monkeypatch, tmp_path
     listing = client.get("/api/evaluations/")
     detail = client.get(f"/api/evaluations/{evaluation_id}/")
     rollup = client.get("/api/evaluations/rollup/")
+    trends = client.get("/api/evaluations/trends/")
 
     assert evaluate.status_code == 200
     assert evaluate.json()["schema_version"] == "aisec.model_risk.v1"
@@ -65,6 +66,10 @@ def test_model_risk_api_end_to_end_evaluate_history_rollup(monkeypatch, tmp_path
     assert rollup.status_code == 200
     assert rollup.json()["total_evaluations"] == 1
     assert rollup.json()["latest"][0]["evaluation_id"] == evaluation_id
+    assert trends.status_code == 200
+    assert trends.json()["total_evaluations"] == 1
+    assert trends.json()["by_target"][0]["key"] == "E2E Customer RAG"
+    assert trends.json()["by_framework"]
 
 
 def test_model_risk_api_end_to_end_baseline_compare_delete(monkeypatch, tmp_path) -> None:

@@ -13,7 +13,7 @@ As of the current local workspace:
 - Version: `1.10.0`.
 - Branch: `main`.
 - Release target: `v1.10.0`.
-- Unit tests: `1489 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- Unit tests: `1491 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - Security agents: `36`.
 - Correlation rules: `40`.
 - Agent-on-agent correlation rules: `9`.
@@ -574,6 +574,8 @@ Completed after v1.10.0 release:
   `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.
 - Added governance rollup endpoint:
   `GET /api/evaluations/rollup/`.
+- Added governance trends endpoint:
+  `GET /api/evaluations/trends/`.
 - Added approved model-risk baseline library:
   `GET/POST /api/evaluation-baselines/` and
   `POST /api/evaluation-baselines/{baseline_id}/compare/`.

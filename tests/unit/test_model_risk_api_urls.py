@@ -15,6 +15,7 @@ def test_model_risk_api_url_names_resolve() -> None:
     assert reverse("evaluate-model-risk") == "/api/evaluate/model/"
     assert reverse("list-model-risk-evaluations") == "/api/evaluations/"
     assert reverse("model-risk-evaluation-rollup") == "/api/evaluations/rollup/"
+    assert reverse("model-risk-evaluation-trends") == "/api/evaluations/trends/"
     assert (
         reverse("get-model-risk-evaluation", kwargs={"evaluation_id": "eval-1"})
         == "/api/evaluations/eval-1/"

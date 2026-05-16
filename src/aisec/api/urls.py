@@ -34,6 +34,7 @@ def _build_urlpatterns() -> list[Any]:
         path("api/evaluate/model/", views["evaluate_model_risk"], name="evaluate-model-risk"),
         path("api/evaluations/", views["list_model_risk_evaluations"], name="list-model-risk-evaluations"),
         path("api/evaluations/rollup/", views["model_risk_evaluation_rollup"], name="model-risk-evaluation-rollup"),
+        path("api/evaluations/trends/", views["model_risk_evaluation_trends"], name="model-risk-evaluation-trends"),
         path("api/evaluations/<str:evaluation_id>/", views["get_model_risk_evaluation"], name="get-model-risk-evaluation"),
         path("api/evaluation-baselines/", views["model_risk_baselines"], name="model-risk-baselines"),
         path("api/evaluation-baselines/<str:baseline_id>/", views["model_risk_baseline_detail"], name="model-risk-baseline-detail"),

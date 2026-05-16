@@ -126,6 +126,14 @@ def _get_serializers() -> dict[str, Any]:
         policy_counts = serializers.DictField()
         latest = serializers.ListField(child=serializers.DictField())
 
+    class ModelRiskEvaluationTrendsSerializer(serializers.Serializer):
+        total_evaluations = serializers.IntegerField()
+        by_target = serializers.ListField(child=serializers.DictField())
+        by_provider = serializers.ListField(child=serializers.DictField())
+        by_project = serializers.ListField(child=serializers.DictField())
+        by_framework = serializers.ListField(child=serializers.DictField())
+        by_day = serializers.ListField(child=serializers.DictField())
+
     class ModelRiskBaselineRequestSerializer(serializers.Serializer):
         name = serializers.CharField()
         target_name = serializers.CharField()
@@ -183,6 +191,7 @@ def _get_serializers() -> dict[str, Any]:
         "ModelRiskEvaluationStatusSerializer": ModelRiskEvaluationStatusSerializer,
         "ModelRiskEvaluationRecordSerializer": ModelRiskEvaluationRecordSerializer,
         "ModelRiskEvaluationRollupSerializer": ModelRiskEvaluationRollupSerializer,
+        "ModelRiskEvaluationTrendsSerializer": ModelRiskEvaluationTrendsSerializer,
         "ModelRiskBaselineRequestSerializer": ModelRiskBaselineRequestSerializer,
         "ModelRiskBaselineSerializer": ModelRiskBaselineSerializer,
         "ModelRiskBaselineCompareRequestSerializer": ModelRiskBaselineCompareRequestSerializer,

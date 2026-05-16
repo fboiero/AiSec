@@ -19,6 +19,7 @@
 - [Model-risk result schema](schemas/model-risk-result.schema.json): JSON Schema for results.
 - API evaluation history: `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.
 - API evaluation rollup: `GET /api/evaluations/rollup/`.
+- API evaluation trends: `GET /api/evaluations/trends/`.
 - API approved baselines: `GET/POST /api/evaluation-baselines/`.
 - API accepted exceptions: `GET/POST /api/evaluation-exceptions/`.
 

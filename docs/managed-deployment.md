@@ -31,6 +31,7 @@ GET  /api/docs/
 POST /api/evaluate/model/
 GET  /api/evaluations/
 GET  /api/evaluations/rollup/
+GET  /api/evaluations/trends/
 POST /api/evaluation-baselines/
 POST /api/evaluation-baselines/{baseline_id}/compare/
 POST /api/evaluation-exceptions/
@@ -171,6 +172,8 @@ Before go-live:
 - `GET /api/ready/` returns 200.
 - `POST /api/evaluate/model/` stores a model-risk evaluation.
 - `GET /api/evaluations/rollup/` returns posture data.
+- `GET /api/evaluations/trends/` returns target, provider, project,
+  framework, and daily trend groups.
 - `scripts/smoke-managed-api.sh` passes against the deployed service URL.
 - `scripts/capture-managed-evidence.sh` captures live, ready, OpenAPI,
   rollup, evaluations, baselines, and exceptions.

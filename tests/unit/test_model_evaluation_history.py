@@ -109,6 +109,27 @@ class TestModelEvaluationHistory:
         assert filtered["total_evaluations"] == 1
         assert filtered["unique_targets"] == 1
 
+    def test_model_evaluation_trends_group_posture_dimensions(self, history: ScanHistory) -> None:
+        first = _request("first")
+        second = _request("second")
+        second.target.name = "Other RAG"
+        second.target.provider = "anthropic"
+        second.context.project_id = "other-project"
+        history.save_model_evaluation(first, evaluate_model_risk(first))
+        history.save_model_evaluation(second, evaluate_model_risk(second))
+
+        trends = history.model_evaluation_trends()
+        filtered = history.model_evaluation_trends(target_name="Other RAG")
+
+        assert trends["total_evaluations"] == 2
+        assert {row["key"] for row in trends["by_target"]} == {"History RAG", "Other RAG"}
+        assert {row["key"] for row in trends["by_provider"]} == {"openai", "anthropic"}
+        assert {row["key"] for row in trends["by_project"]} == {"unknown", "other-project"}
+        assert {row["key"] for row in trends["by_framework"]} >= {"gdpr", "owasp_llm"}
+        assert trends["by_day"][0]["evaluation_count"] == 2
+        assert filtered["total_evaluations"] == 1
+        assert filtered["by_target"][0]["key"] == "Other RAG"
+
     def test_save_get_list_and_delete_model_baseline(self, history: ScanHistory) -> None:
         request = _request("baseline-source")
         result = evaluate_model_risk(request)

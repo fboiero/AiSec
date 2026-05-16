@@ -250,6 +250,7 @@ def _get_views() -> dict[str, Any]:
     ModelRiskEvaluationStatusSerializer = serializers["ModelRiskEvaluationStatusSerializer"]
     ModelRiskEvaluationRecordSerializer = serializers["ModelRiskEvaluationRecordSerializer"]
     ModelRiskEvaluationRollupSerializer = serializers["ModelRiskEvaluationRollupSerializer"]
+    ModelRiskEvaluationTrendsSerializer = serializers["ModelRiskEvaluationTrendsSerializer"]
     ModelRiskBaselineRequestSerializer = serializers["ModelRiskBaselineRequestSerializer"]
     ModelRiskBaselineSerializer = serializers["ModelRiskBaselineSerializer"]
     ModelRiskBaselineCompareRequestSerializer = serializers["ModelRiskBaselineCompareRequestSerializer"]
@@ -432,6 +433,14 @@ def _get_views() -> dict[str, Any]:
         target_name = request.query_params.get("target_name")
         rollup = _get_history().model_evaluation_rollup(target_name=target_name)
         serializer = ModelRiskEvaluationRollupSerializer(rollup)
+        return Response(serializer.data)
+
+    @api_view(["GET"])
+    def model_risk_evaluation_trends(request: Any) -> Response:
+        """Return model-risk trend rollups by target, provider, project, framework, and day."""
+        target_name = request.query_params.get("target_name")
+        trends = _get_history().model_evaluation_trends(target_name=target_name)
+        serializer = ModelRiskEvaluationTrendsSerializer(trends)
         return Response(serializer.data)
 
     @api_view(["GET", "POST"])
@@ -720,6 +729,7 @@ def _get_views() -> dict[str, Any]:
         "list_model_risk_evaluations": list_model_risk_evaluations,
         "get_model_risk_evaluation": get_model_risk_evaluation,
         "model_risk_evaluation_rollup": model_risk_evaluation_rollup,
+        "model_risk_evaluation_trends": model_risk_evaluation_trends,
         "model_risk_baselines": model_risk_baselines,
         "model_risk_baseline_detail": model_risk_baseline_detail,
         "compare_model_risk_baseline": compare_model_risk_baseline_view,

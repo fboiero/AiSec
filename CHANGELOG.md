@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API-mode approved baseline library via `GET/POST /api/evaluation-baselines/`
   and `POST /api/evaluation-baselines/{baseline_id}/compare/`.
 - API-mode posture rollup via `GET /api/evaluations/rollup/`.
+- API-mode posture trends via `GET /api/evaluations/trends/`, grouped by
+  target, provider, project, framework, and day.
 - API-mode accepted model-risk exceptions via
   `GET/POST /api/evaluation-exceptions/`, with baseline comparison separating
   accepted and unaccepted new findings.

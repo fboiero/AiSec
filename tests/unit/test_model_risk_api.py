@@ -144,6 +144,43 @@ def test_model_risk_api_returns_evaluation_rollup(monkeypatch, tmp_path) -> None
     assert response.data["latest"][0]["target_name"] == "API Customer RAG"
 
 
+def test_model_risk_api_returns_evaluation_trends(monkeypatch, tmp_path) -> None:
+    pytest.importorskip("rest_framework")
+
+    from aisec.api.config import _configure_django
+    from aisec.api.views import _get_views
+    from aisec.core.history import ScanHistory
+    import aisec.api.scan_runner as scan_runner
+
+    monkeypatch.setattr(scan_runner, "_history", ScanHistory(tmp_path / "api-history.db"))
+
+    _configure_django()
+    from rest_framework.test import APIRequestFactory
+
+    views = _get_views()
+    factory = APIRequestFactory()
+    first_payload = _payload()
+    second_payload = _payload()
+    second_payload["request_id"] = "api-test-request-2"
+    second_payload["target"]["provider"] = "anthropic"  # type: ignore[index]
+    second_payload["context"]["project_id"] = "api-project"  # type: ignore[index]
+    views["evaluate_model_risk"](
+        factory.post("/api/evaluate/model/", first_payload, format="json")
+    )
+    views["evaluate_model_risk"](
+        factory.post("/api/evaluate/model/", second_payload, format="json")
+    )
+
+    response = views["model_risk_evaluation_trends"](factory.get("/api/evaluations/trends/"))
+
+    assert response.status_code == 200
+    assert response.data["total_evaluations"] == 2
+    assert response.data["by_target"][0]["key"] == "API Customer RAG"
+    assert {row["key"] for row in response.data["by_provider"]} == {"openai", "anthropic"}
+    assert {row["key"] for row in response.data["by_framework"]} >= {"gdpr", "owasp_llm"}
+    assert response.data["by_day"][0]["evaluation_count"] == 2
+
+
 def test_model_risk_api_creates_lists_and_compares_baselines(monkeypatch, tmp_path) -> None:
     pytest.importorskip("rest_framework")
 

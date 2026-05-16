@@ -5,7 +5,7 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1489 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- **Unit tests**: `1491 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
@@ -88,6 +88,8 @@ New/updated capabilities:
 - Added persisted API-mode model-risk evaluation history.
 - Added API-mode approved baseline library and baseline comparison endpoint.
 - Added API-mode evaluation rollup for governance/posture screens.
+- Added API-mode evaluation trends for target, provider, project, framework,
+  and daily posture rollups.
 - Added API-mode accepted exceptions for model-risk finding fingerprints.
 - Fixed API schema/health initialization under real DRF installs.
 - Fixed lazy URL pattern reversibility for Django URL reversing.

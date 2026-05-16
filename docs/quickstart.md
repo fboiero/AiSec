@@ -151,6 +151,7 @@ Persisted evaluation history:
 ```text
 http://localhost:8000/api/evaluations/
 http://localhost:8000/api/evaluations/rollup/
+http://localhost:8000/api/evaluations/trends/
 http://localhost:8000/api/evaluations/{evaluation_id}/
 ```
 

@@ -137,6 +137,8 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: managed evidence capture and rollback runbook for external pilots.
 - Completed: managed pilot rehearsal script and evidence package.
 - Completed: managed pilot report template for go/no-go decisions.
+- Completed: API-mode posture trends by target, provider, project, framework,
+  and day.
 
 ### Days 61-90
 

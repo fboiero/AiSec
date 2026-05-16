@@ -187,6 +187,48 @@ class _Encoder(json.JSONEncoder):
         return super().default(obj)
 
 
+def _accumulate_model_trend_group(
+    groups: dict[str, dict[str, Any]],
+    key: str,
+    row: Any,
+) -> None:
+    group = groups.setdefault(
+        key or "unknown",
+        {
+            "key": key or "unknown",
+            "evaluation_count": 0,
+            "finding_count": 0,
+            "risk_score_total": 0.0,
+            "risk_counts": {},
+            "policy_counts": {},
+        },
+    )
+    risk = row["overall_risk"]
+    verdict = row["policy_verdict"]
+    group["evaluation_count"] += 1
+    group["finding_count"] += int(row["finding_count"] or 0)
+    group["risk_score_total"] += float(row["risk_score"] or 0.0)
+    group["risk_counts"][risk] = group["risk_counts"].get(risk, 0) + 1
+    group["policy_counts"][verdict] = group["policy_counts"].get(verdict, 0) + 1
+
+
+def _finalize_model_trend_groups(groups: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    finalized: list[dict[str, Any]] = []
+    for group in groups.values():
+        count = group["evaluation_count"]
+        finalized.append(
+            {
+                "key": group["key"],
+                "evaluation_count": count,
+                "finding_count": group["finding_count"],
+                "average_risk_score": round(group["risk_score_total"] / count, 2) if count else 0.0,
+                "risk_counts": dict(sorted(group["risk_counts"].items())),
+                "policy_counts": dict(sorted(group["policy_counts"].items())),
+            }
+        )
+    return sorted(finalized, key=lambda item: (-item["evaluation_count"], item["key"]))
+
+
 class ScanHistory:
     """SQLite-backed scan history for tracking security posture over time."""
 
@@ -914,6 +956,55 @@ class ScanHistory:
             "risk_counts": {row["overall_risk"]: row["count"] for row in risk_rows},
             "policy_counts": {row["policy_verdict"]: row["count"] for row in verdict_rows},
             "latest": latest,
+        }
+
+    def model_evaluation_trends(self, target_name: str | None = None) -> dict[str, Any]:
+        """Return posture trend rollups from persisted model-risk evaluations."""
+        conn = self._get_conn()
+        where = "WHERE target_name = ?" if target_name else ""
+        params: tuple[Any, ...] = (target_name,) if target_name else ()
+        rows = conn.execute(
+            f"""SELECT evaluation_id, target_name, provider, model_id, source,
+                       overall_risk, risk_score, policy_verdict, finding_count,
+                       created_at, result_json
+                FROM model_evaluations {where}
+                ORDER BY created_at ASC""",
+            params,
+        ).fetchall()
+
+        by_target: dict[str, dict[str, Any]] = {}
+        by_provider: dict[str, dict[str, Any]] = {}
+        by_project: dict[str, dict[str, Any]] = {}
+        by_framework: dict[str, dict[str, Any]] = {}
+        by_day: dict[str, dict[str, Any]] = {}
+
+        for row in rows:
+            result = json.loads(row["result_json"])
+            project_id = str(result.get("metadata", {}).get("project_id") or "unknown")
+            day = str(row["created_at"])[:10]
+
+            _accumulate_model_trend_group(by_target, row["target_name"], row)
+            _accumulate_model_trend_group(by_provider, row["provider"] or "unknown", row)
+            _accumulate_model_trend_group(by_project, project_id, row)
+            _accumulate_model_trend_group(by_day, day, row)
+
+            for framework in result.get("frameworks", []):
+                framework_key = framework.get("framework", "unknown")
+                framework_row = {
+                    "risk_score": framework.get("score", 0.0),
+                    "overall_risk": row["overall_risk"],
+                    "policy_verdict": framework.get("status", "pass"),
+                    "finding_count": framework.get("finding_count", 0),
+                }
+                _accumulate_model_trend_group(by_framework, framework_key, framework_row)
+
+        return {
+            "total_evaluations": len(rows),
+            "by_target": _finalize_model_trend_groups(by_target),
+            "by_provider": _finalize_model_trend_groups(by_provider),
+            "by_project": _finalize_model_trend_groups(by_project),
+            "by_framework": _finalize_model_trend_groups(by_framework),
+            "by_day": _finalize_model_trend_groups(by_day),
         }
 
     def save_model_baseline(
