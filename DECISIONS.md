@@ -28,6 +28,8 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Correlation rules: 40.
 - Agentic review correlation rules: 9.
 - Added service-to-service model-risk endpoint: `POST /api/evaluate/model/`.
+- Added two validated OrchestAI use cases: customer-support RAG and an
+  MCP-enabled operations agent.
 - Added standalone HTTP adapter example for `aisec serve`.
 - Added `aisec evaluate summarize` for CI artifact Markdown/JSON rollups.
 - Added `aisec evaluate evidence` for framework-grouped compliance evidence.
@@ -46,7 +48,7 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added DRF `APIClient` end-to-end coverage for the model-risk API workflow,
   including accepted exceptions.
 - Added DRF `APIClient` negative-path coverage for model-risk API errors.
-- Unit tests: 1474 passed, 9 skipped in local `.venv` with `.[api,dev]`.
+- Unit tests: 1476 passed, 9 skipped in local `.venv` with `.[api,dev]`.
 
 ---
 

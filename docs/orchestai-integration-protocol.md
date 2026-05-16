@@ -110,8 +110,19 @@ Other examples:
 - [`examples/model-route-risk-request.json`](examples/model-route-risk-request.json)
 - [`examples/orchestai-model-risk-request.json`](examples/orchestai-model-risk-request.json)
 - [`examples/orchestai-model-risk-result.json`](examples/orchestai-model-risk-result.json)
+- [`examples/orchestai-usecase-customer-support-rag.json`](examples/orchestai-usecase-customer-support-rag.json)
+- [`examples/orchestai-usecase-ops-agent-mcp.json`](examples/orchestai-usecase-ops-agent-mcp.json)
 - [`examples/tool-agent-risk-request.json`](examples/tool-agent-risk-request.json)
 - [`examples/mcp-workflow-risk-request.json`](examples/mcp-workflow-risk-request.json)
+
+Validated OrchestAI use cases:
+
+- Customer-support RAG with PII and incomplete retrieval/tenant controls:
+  expected `overall_risk=high` and `policy_verdict.status=warn` when
+  `fail_on=critical`.
+- Operations agent with tools, MCP, memory, and autonomous code execution:
+  expected `overall_risk=critical` and `policy_verdict.status=fail` when
+  `fail_on=high`.
 
 ## Request Shape
 

@@ -5,7 +5,7 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1474 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- **Unit tests**: `1476 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
@@ -68,6 +68,8 @@ New/updated capabilities:
 - Added `aisec evaluate schema`.
 - Added JSON schemas under `docs/schemas/`.
 - Added OrchestAI request/result examples.
+- Added validated OrchestAI use-case fixtures for customer-support RAG and an
+  MCP-enabled operations agent.
 - Added subprocess adapter example.
 - Added HTTP adapter example for `aisec serve`.
 - Added GitHub Actions and GitLab CI model-risk examples.

@@ -94,6 +94,8 @@ Try additional target examples:
 aisec evaluate model --input docs/examples/model-route-risk-request.json --output /tmp/model-route-result.json
 aisec evaluate model --input docs/examples/tool-agent-risk-request.json --output /tmp/tool-agent-result.json
 aisec evaluate model --input docs/examples/mcp-workflow-risk-request.json --output /tmp/mcp-workflow-result.json
+aisec evaluate model --input docs/examples/orchestai-usecase-customer-support-rag.json --output /tmp/orchestai-support-rag-result.json
+aisec evaluate model --input docs/examples/orchestai-usecase-ops-agent-mcp.json --output /tmp/orchestai-ops-agent-result.json
 ```
 
 Copyable CI examples:

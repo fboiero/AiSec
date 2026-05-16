@@ -30,6 +30,8 @@
 - `aisec evaluate compare`: compare current model-risk evidence against an approved baseline.
 - [OrchestAI RAG request](examples/orchestai-model-risk-request.json)
 - [OrchestAI RAG result](examples/orchestai-model-risk-result.json)
+- [OrchestAI customer-support RAG use case](examples/orchestai-usecase-customer-support-rag.json)
+- [OrchestAI ops agent MCP use case](examples/orchestai-usecase-ops-agent-mcp.json)
 - [Generic model route request](examples/model-route-risk-request.json)
 - [Tool-enabled agent request](examples/tool-agent-risk-request.json)
 - [MCP workflow request](examples/mcp-workflow-risk-request.json)

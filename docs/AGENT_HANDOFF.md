@@ -13,7 +13,7 @@ As of the current local workspace:
 - Version: `1.10.0`.
 - Branch: `main`.
 - Release target: `v1.10.0`.
-- Unit tests: `1474 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- Unit tests: `1476 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - Security agents: `36`.
 - Correlation rules: `40`.
 - Agent-on-agent correlation rules: `9`.
@@ -79,6 +79,8 @@ Start from:
 
 ```text
 docs/examples/orchestai-model-risk-request.json
+docs/examples/orchestai-usecase-customer-support-rag.json
+docs/examples/orchestai-usecase-ops-agent-mcp.json
 ```
 
 Other request profiles:
@@ -548,6 +550,8 @@ Completed after v1.10.0 release:
   `POST /api/evaluate/model/`.
 - Added standalone HTTP adapter example:
   `docs/examples/aisec_http_adapter.py`.
+- Added validated OrchestAI use-case fixtures for customer-support RAG and an
+  MCP-enabled operations agent.
 - Added CI artifact parser and summary command:
   `aisec evaluate summarize`.
 - Added framework evidence export command:

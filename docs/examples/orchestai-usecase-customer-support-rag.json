@@ -1,0 +1,64 @@
+{
+  "schema_version": "aisec.model_risk.v1",
+  "request_id": "orchestai-usecase-customer-support-rag-001",
+  "source": "orchestai",
+  "target": {
+    "type": "rag_pipeline",
+    "name": "OrchestAI Customer Support RAG",
+    "provider": "openai",
+    "model_id": "gpt-4.1",
+    "environment": "staging",
+    "usage_context": "customer-support-rag",
+    "capabilities": {
+      "rag_enabled": true,
+      "tools_enabled": false,
+      "memory_enabled": false,
+      "mcp_enabled": false,
+      "code_execution_enabled": false,
+      "web_access_enabled": false,
+      "fine_tuning_enabled": false,
+      "multimodal_enabled": false
+    },
+    "data_classes": [
+      "pii",
+      "customer_messages",
+      "internal_docs"
+    ],
+    "metadata": {
+      "orchestai_model_config_id": "model-config-support-rag",
+      "orchestai_workflow_id": "workflow-support-rag"
+    }
+  },
+  "frameworks": [
+    "owasp_llm",
+    "nist_ai_rmf",
+    "iso_42001",
+    "gdpr",
+    "habeas_data"
+  ],
+  "context": {
+    "organization_id": "orchestai-demo",
+    "project_id": "customer-support",
+    "requested_by": "security-review",
+    "jurisdiction": "AR",
+    "metadata": {
+      "evaluation_created_at": "2026-05-16T00:00:00Z"
+    },
+    "safeguards": {
+      "pii_redaction": false,
+      "prompt_logging_disabled": true,
+      "consent_required": true,
+      "retention_policy_defined": true,
+      "human_in_loop": true,
+      "tool_approval_required": false,
+      "output_filtering": true,
+      "retrieval_filtering": false,
+      "tenant_isolation": false,
+      "audit_logging": true,
+      "rate_limiting": true
+    }
+  },
+  "policy": {
+    "fail_on": "critical"
+  }
+}

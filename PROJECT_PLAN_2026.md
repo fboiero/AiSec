@@ -30,7 +30,7 @@ As of May 2026:
 - Model-risk protocol: `aisec.model_risk.v1`.
 - Command: `aisec evaluate model`.
 - First integration target: OrchestAI.
-- Tests: 1,474 passing and 9 skipped in local `.venv` with `.[api,dev]`.
+- Tests: 1,476 passing and 9 skipped in local `.venv` with `.[api,dev]`.
 - Correlation rules: 40 total, including 9 centered on `agentic_review`.
 
 ## 2026 Outcomes
@@ -60,7 +60,8 @@ Implemented in the local v1.10.0 workspace:
   `GET/POST /api/evaluation-baselines/`.
 - Accepted model-risk exceptions for API mode:
   `GET/POST /api/evaluation-exceptions/`.
-- Example OrchestAI request/result artifacts.
+- Example OrchestAI request/result artifacts and two validated OrchestAI
+  use-case fixtures.
 - Python subprocess adapter handling missing binary, timeout, policy failure,
   and invalid output as distinct outcomes.
 - Python HTTP adapter for `aisec serve` handling endpoint errors, timeouts,

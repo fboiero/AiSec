@@ -130,7 +130,8 @@ This is lower friction than selling a complete governance platform immediately.
   baseline library.
 - Completed: API-mode exception/acceptance metadata for finding fingerprints.
 - Completed: framework evidence exports for model-risk artifacts.
-- Next: validate against two OrchestAI use cases.
+- Completed: validation against two OrchestAI use cases.
+- Next: prepare reusable adapter guide for other orchestrators.
 
 ### Days 61-90
 
