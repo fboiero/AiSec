@@ -5,7 +5,7 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1476 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- **Unit tests**: `1478 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
@@ -72,6 +72,7 @@ New/updated capabilities:
   MCP-enabled operations agent.
 - Added subprocess adapter example.
 - Added HTTP adapter example for `aisec serve`.
+- Added reusable orchestrator adapter guide for non-OrchestAI integrations.
 - Added GitHub Actions and GitLab CI model-risk examples.
 - Added `aisec evaluate summarize` for Markdown/JSON CI artifact summaries.
 - Added `aisec evaluate evidence` for framework-grouped compliance evidence.

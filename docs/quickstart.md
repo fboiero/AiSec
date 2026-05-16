@@ -198,5 +198,6 @@ OrchestAI compliance evaluator
 Read:
 
 - [OrchestAI Integration Protocol](orchestai-integration-protocol.md)
+- [Orchestrator Adapter Guide](orchestrator-adapter-guide.md)
 - [Architecture](architecture.md)
 - [Frameworks](frameworks.md)

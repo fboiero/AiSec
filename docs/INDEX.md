@@ -12,6 +12,7 @@
 ## Orchestrator Integration
 
 - [Orchestrator Integration Protocol](orchestai-integration-protocol.md): JSON contract and adapter guidance.
+- [Orchestrator Adapter Guide](orchestrator-adapter-guide.md): reusable adapter pattern for other platforms.
 - [Model-risk request schema](schemas/model-risk-request.schema.json): JSON Schema for requests.
 - [Model-risk result schema](schemas/model-risk-result.schema.json): JSON Schema for results.
 - API evaluation history: `GET /api/evaluations/` and `GET /api/evaluations/{evaluation_id}/`.

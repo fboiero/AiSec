@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by governance framework for compliance records.
 - Validated OrchestAI use-case request fixtures for customer-support RAG and an
   MCP-enabled operations agent.
+- Reusable orchestrator adapter guide covering field mapping, execution modes,
+  errors, storage, baselines, exceptions, and UI fields.
 - `aisec evaluate compare` to compare current model-risk evidence against an
   approved baseline and optionally fail CI on regression.
 - API-mode evaluation history for model-risk evidence via

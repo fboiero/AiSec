@@ -131,11 +131,11 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: API-mode exception/acceptance metadata for finding fingerprints.
 - Completed: framework evidence exports for model-risk artifacts.
 - Completed: validation against two OrchestAI use cases.
-- Next: prepare reusable adapter guide for other orchestrators.
+- Completed: reusable adapter guide for other orchestrators.
+- Next: define managed deployment path.
 
 ### Days 61-90
 
-- Prepare reusable adapter guide for other orchestrators.
 - Define managed deployment path.
 
 ## Success Metrics

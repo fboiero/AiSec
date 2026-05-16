@@ -8,6 +8,8 @@ pipelines, and workflows.
 
 For a full current-state handoff aimed at another coding agent, read
 [`AGENT_HANDOFF.md`](AGENT_HANDOFF.md).
+For a platform-neutral adapter implementation guide, read
+[`orchestrator-adapter-guide.md`](orchestrator-adapter-guide.md).
 
 AiSec is not imported into the orchestrator as an application dependency. The
 orchestrator invokes AiSec through a stable JSON contract, initially via
