@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/capture-managed-evidence.sh`.
 - Managed pilot rehearsal wrapper that runs evidence capture, smoke validation,
   and post-smoke evidence capture: `scripts/rehearse-managed-pilot.sh`.
+- Managed pilot go/no-go report template:
+  `docs/managed-pilot-report-template.md`.
 - `aisec evaluate compare` to compare current model-risk evidence against an
   approved baseline and optionally fail CI on regression.
 - API-mode evaluation history for model-risk evidence via

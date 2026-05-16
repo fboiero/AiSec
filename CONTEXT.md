@@ -5,7 +5,7 @@
 - **Version**: `1.10.0` local.
 - **Branch**: `main`.
 - **Release target**: `v1.10.0`.
-- **Unit tests**: `1486 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
+- **Unit tests**: `1489 passed, 9 skipped` in local `.venv` with `.[api,dev]`.
 - **Security agents**: `36`.
 - **Correlation rules**: `40`.
 - **Agent-on-agent correlation rules**: `9`.
@@ -79,6 +79,7 @@ New/updated capabilities:
 - Added managed evidence capture script and rollback runbook for pilot
   operations.
 - Added managed pilot rehearsal script for external pilot evidence packages.
+- Added managed pilot report template for go/no-go decisions.
 - Added GitHub Actions and GitLab CI model-risk examples.
 - Added `aisec evaluate summarize` for Markdown/JSON CI artifact summaries.
 - Added `aisec evaluate evidence` for framework-grouped compliance evidence.

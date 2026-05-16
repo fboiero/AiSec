@@ -243,6 +243,9 @@ Review checklist:
 - `post-smoke/model-risk-evaluations.json` includes the smoke evaluation.
 - `pre-smoke/` and `post-smoke/` are attached to the pilot report.
 
+Use [`managed-pilot-report-template.md`](managed-pilot-report-template.md) to
+turn the rehearsal directory into a go/no-go report for the external pilot.
+
 ## Rollback Runbook
 
 Rollback trigger examples:

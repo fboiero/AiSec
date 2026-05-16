@@ -38,6 +38,7 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added managed evidence capture script and rollback runbook for external pilot
   operations.
 - Added managed pilot rehearsal script for external pilot evidence packages.
+- Added managed pilot report template for external go/no-go decisions.
 - Added `aisec evaluate summarize` for CI artifact Markdown/JSON rollups.
 - Added `aisec evaluate evidence` for framework-grouped compliance evidence.
 - Added `aisec evaluate compare` for approved-baseline regression checks.
@@ -55,7 +56,7 @@ other projects, and improve analysis so agents can analyze agentic systems.
 - Added DRF `APIClient` end-to-end coverage for the model-risk API workflow,
   including accepted exceptions.
 - Added DRF `APIClient` negative-path coverage for model-risk API errors.
-- Unit tests: 1486 passed, 9 skipped in local `.venv` with `.[api,dev]`.
+- Unit tests: 1489 passed, 9 skipped in local `.venv` with `.[api,dev]`.
 
 ---
 

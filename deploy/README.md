@@ -38,6 +38,8 @@ AISEC_REHEARSAL_DIR=../aisec-managed-rehearsals \
   ../scripts/rehearse-managed-pilot.sh
 ```
 
+Use `../docs/managed-pilot-report-template.md` to summarize the rehearsal.
+
 ### Kubernetes (raw manifests)
 
 ```bash

@@ -136,10 +136,11 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: managed API smoke script for external pilots.
 - Completed: managed evidence capture and rollback runbook for external pilots.
 - Completed: managed pilot rehearsal script and evidence package.
+- Completed: managed pilot report template for go/no-go decisions.
 
 ### Days 61-90
 
-- Execute external pilot with a real managed environment.
+- Execute external pilot with a real managed environment and stakeholder signoff.
 
 ## Success Metrics
 

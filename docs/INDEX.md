@@ -7,6 +7,7 @@
 - [Quick Start](quickstart.md): install and run `evaluate` or `scan`.
 - [Architecture](architecture.md): evaluation path, scan path, and integration boundary.
 - [Managed Deployment](managed-deployment.md): Compose, Kubernetes, and Helm service path.
+- [Managed Pilot Report Template](managed-pilot-report-template.md): go/no-go report for external pilots.
 - [Product Strategy 2026](product-strategy-2026.md): positioning and execution plan.
 - [Project Plan 2026](../PROJECT_PLAN_2026.md): roadmap and acceptance criteria.
 
