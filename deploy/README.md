@@ -1,5 +1,8 @@
 # AiSec Deployment Guide
 
+For the managed service-mode path, operational checklist, and upgrade guidance,
+see [`../docs/managed-deployment.md`](../docs/managed-deployment.md).
+
 ## Quick Start
 
 ### Docker Compose (simplest)
@@ -9,7 +12,9 @@ cd deploy/
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Open `http://localhost:8000/dashboard/` to access the web UI.
+Open `http://localhost:8000/dashboard/` to access the web UI. Health probes are
+available at `http://localhost:8000/api/live/` and
+`http://localhost:8000/api/ready/`.
 
 ### Kubernetes (raw manifests)
 

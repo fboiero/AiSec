@@ -1,4 +1,4 @@
-"""Tests for deployment manifests validity (v1.7.0)."""
+"""Tests for deployment manifests validity."""
 
 from __future__ import annotations
 
@@ -47,6 +47,14 @@ class TestKubernetesManifests:
         container = doc["spec"]["template"]["spec"]["containers"][0]
         assert "livenessProbe" in container
         assert "readinessProbe" in container
+        assert container["livenessProbe"]["httpGet"]["path"] == "/api/live/"
+        assert container["readinessProbe"]["httpGet"]["path"] == "/api/ready/"
+
+    def test_deployment_uses_current_release_image(self):
+        with open(K8S_DIR / "deployment.yaml") as f:
+            doc = yaml.safe_load(f)
+        container = doc["spec"]["template"]["spec"]["containers"][0]
+        assert container["image"] == "ghcr.io/fboiero/aisec:1.10.0"
 
     def test_service_port_8000(self):
         with open(K8S_DIR / "service.yaml") as f:
@@ -76,8 +84,8 @@ class TestHelmChart:
         with open(path) as f:
             chart = yaml.safe_load(f)
         assert chart["name"] == "aisec"
-        assert chart["version"] == "1.7.0"
-        assert chart["appVersion"] == "1.7.0"
+        assert chart["version"] == "1.10.0"
+        assert chart["appVersion"] == "1.10.0"
 
     def test_values_yaml_exists(self):
         path = HELM_DIR / "values.yaml"
@@ -86,8 +94,11 @@ class TestHelmChart:
             values = yaml.safe_load(f)
         assert values["replicaCount"] >= 1
         assert "image" in values
+        assert values["image"]["tag"] == "1.10.0"
         assert "service" in values
         assert "resources" in values
+        assert values["probes"]["liveness"]["path"] == "/api/live/"
+        assert values["probes"]["readiness"]["path"] == "/api/ready/"
 
     def test_templates_exist(self):
         templates_dir = HELM_DIR / "templates"
@@ -131,3 +142,4 @@ class TestDockerCompose:
             doc = yaml.safe_load(f)
         api_service = doc["services"]["aisec-api"]
         assert "healthcheck" in api_service
+        assert "http://localhost:8000/api/live/" in api_service["healthcheck"]["test"]

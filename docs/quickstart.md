@@ -199,5 +199,6 @@ Read:
 
 - [OrchestAI Integration Protocol](orchestai-integration-protocol.md)
 - [Orchestrator Adapter Guide](orchestrator-adapter-guide.md)
+- [Managed Deployment](managed-deployment.md)
 - [Architecture](architecture.md)
 - [Frameworks](frameworks.md)

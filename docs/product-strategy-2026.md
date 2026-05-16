@@ -132,11 +132,11 @@ This is lower friction than selling a complete governance platform immediately.
 - Completed: framework evidence exports for model-risk artifacts.
 - Completed: validation against two OrchestAI use cases.
 - Completed: reusable adapter guide for other orchestrators.
-- Next: define managed deployment path.
+- Completed: managed deployment path for service-mode AiSec.
 
 ### Days 61-90
 
-- Define managed deployment path.
+- Harden managed deployment path for external pilots.
 
 ## Success Metrics
 

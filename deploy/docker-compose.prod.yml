@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   aisec-api:
-    image: ghcr.io/fboiero/aisec:1.7.0
+    image: ghcr.io/fboiero/aisec:1.10.0
     container_name: aisec-api
     command: ["aisec", "serve", "--host", "0.0.0.0", "--port", "8000", "--dashboard"]
     ports:
@@ -22,7 +22,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/live/"]
       interval: 30s
       timeout: 10s
       retries: 3

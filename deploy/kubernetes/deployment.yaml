@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: aisec
     app.kubernetes.io/component: api
-    app.kubernetes.io/version: "1.7.0"
+    app.kubernetes.io/version: "1.10.0"
 spec:
   replicas: 2
   selector:
@@ -21,7 +21,7 @@ spec:
       serviceAccountName: aisec
       containers:
         - name: aisec-api
-          image: ghcr.io/fboiero/aisec:1.7.0
+          image: ghcr.io/fboiero/aisec:1.10.0
           ports:
             - containerPort: 8000
               protocol: TCP
@@ -39,13 +39,13 @@ spec:
               memory: 2Gi
           livenessProbe:
             httpGet:
-              path: /api/v1/health/
+              path: /api/live/
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /api/v1/health/
+              path: /api/ready/
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
